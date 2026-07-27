@@ -361,241 +361,237 @@
 
 @media (max-width: 768px) {
   .grid-wrapper {
-    font-size: 0.6rem; /* Reduzido ainda mais */
+    font-size: 0.9rem;
   }
 
-  /* Totalizadores mantêm tamanho fixo - sem responsividade */
+  .totalizadores-container {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .totalizador-item {
+    padding: 8px !important;
+  }
+
+  .totalizador-label {
+    font-size: 9px !important;
+    white-space: normal;
+    line-height: 1.2;
+  }
+
+  .totalizador-valor {
+    font-size: 13px !important;
+  }
 
   .totalizador-input {
-    font-size: 0.5rem; /* Tamanho normal para mobile (igual às células) */
-    padding: 0.2rem;
-    white-space: nowrap;
+    font-size: 0.95rem !important;
+    padding: 6px 8px;
+    white-space: normal;
+    min-height: 36px;
   }
 
-  /* Fazer cada tabela ocupar a tela inteira no mobile */
   .grid-container-dual {
     display: flex;
     flex-direction: column;
-    gap: 0;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
+    gap: 16px;
+    overflow-x: visible;
+    scroll-snap-type: none;
   }
 
   .grid-container-semana {
-    min-width: 100vw; /* Cada tabela ocupa 100% da largura da viewport */
-    width: 100vw;
-    max-width: 100vw; /* Garantir que não ultrapasse */
-    scroll-snap-align: start;
-    border-radius: 0;
-    box-shadow: none;
-    overflow: hidden; /* Prevenir scroll interno */
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+    overflow: visible;
   }
 
   .grid-semana-header {
-    padding: 8px 10px; /* Reduzido */
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0;
+    padding: 12px 14px;
+    flex-wrap: wrap;
+    gap: 6px;
   }
 
   .grid-semana-header h3 {
-    font-size: 0.65rem; /* Reduzido ainda mais */
+    font-size: 0.95rem;
   }
 
   .grid-semana-periodo {
-    font-size: 0.55rem; /* Reduzido ainda mais */
+    font-size: 0.8rem;
   }
 
-  /* Manter layout de tabela no mobile - colunas mais estreitas */
   .grid-header {
-    display: grid; /* Mostrar header no mobile */
-    grid-template-columns: 70px 1fr 70px 1fr 40px 50px 30px; /* Incluindo coluna Retroativo */
-    font-size: 0.5rem; /* Fonte ainda menor */
-    padding: 0.3rem 0.15rem; /* Padding reduzido */
-    width: 100%;
-    box-sizing: border-box;
+    display: none;
   }
 
   .grid-body {
-    max-height: calc(100vh - 250px); /* Altura ajustada */
-    overflow-y: auto;
-    overflow-x: hidden; /* Sem scroll horizontal */
-    width: 100%;
-  }
-
-  .grid-row {
-    display: grid; /* Manter grid, não block */
-    grid-template-columns: 70px 1fr 70px 1fr 40px 50px 30px; /* Incluindo coluna Retroativo */
-    border-bottom: 1px solid #e0e0e0;
-    padding: 0;
-    margin: 0;
-    border-radius: 0;
-    box-shadow: none;
-    background-color: transparent;
+    max-height: none;
+    overflow: visible;
+    padding: 8px;
     width: 100%;
     box-sizing: border-box;
   }
 
+  .grid-row {
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: unset;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background-color: #fff;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .grid-row.row-pago {
+    background-color: #ecfdf5;
+    border-color: #bbf7d0;
+  }
+
+  .grid-row.row-retroativo {
+    background-color: #fffbeb;
+    border-color: #fde68a;
+  }
+
+  .grid-row.row-nao-pago {
+    background-color: #fff;
+  }
+
   .grid-row:hover {
-    background-color: #f8f9fa;
-    box-shadow: none;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
   }
 
   .grid-row:nth-child(even) {
-    background-color: #fafafa;
+    background-color: inherit;
   }
 
   .grid-cell {
     display: flex;
-    padding: 0.25rem 0.12rem; /* Reduzido ainda mais */
-    border-right: 1px solid #e0e0e0;
-    border-bottom: none;
-    min-height: 28px; /* Reduzido ainda mais */
-    font-size: 0.5rem; /* Fonte menor ainda mais */
-    align-items: center;
-    box-sizing: border-box;
-    overflow: hidden; /* Prevenir overflow */
-  }
-
-  /* Primeira célula (Data) - evitar quebra */
-  .grid-row > .grid-cell:first-child {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+    border: none;
+    border-right: none;
+    border-bottom: 1px solid #f1f5f9;
+    padding: 8px 0;
+    min-height: auto;
+    font-size: 0.9rem;
+    overflow: visible;
   }
 
   .grid-cell:last-child {
-    border-right: none;
+    border-bottom: none;
+    padding-bottom: 0;
   }
 
   .grid-cell::before {
-    display: none; /* Remover labels no mobile */
+    content: attr(data-label);
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-bottom: 4px;
+  }
+
+  .grid-cell.acoes-cell::before {
+    display: none;
+  }
+
+  .grid-cell.acoes-cell {
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+    padding-top: 6px;
+  }
+
+  .grid-row > .grid-cell:first-child {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
   }
 
   .grid-cell-content {
     width: 100%;
-    font-size: 0.5rem; /* Reduzido ainda mais */
-    line-height: 1.2;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap; /* Evitar quebra de linha */
-  }
-
-  /* Permitir quebra apenas em descrição e observação */
-  .grid-row > .grid-cell:nth-child(2) .grid-cell-content,
-  .grid-row > .grid-cell:nth-child(4) .grid-cell-content {
+    font-size: 0.95rem;
+    line-height: 1.35;
+    overflow: visible;
+    text-overflow: unset;
     white-space: normal;
     word-break: break-word;
+    padding: 10px 12px;
+    min-height: 2.5rem;
+    box-sizing: border-box;
+    background: #f8fafc;
+    border-radius: 8px;
+  }
+
+  .grid-cell-content:hover {
+    background-color: #f1f5f9;
   }
 
   .grid-input {
     width: 100%;
-    font-size: 0.5rem; /* Reduzido ainda mais */
-    padding: 0.15rem; /* Reduzido ainda mais */
-    border-width: 1px;
+    font-size: 1rem;
+    padding: 10px 12px;
+    min-height: 44px;
+    box-sizing: border-box;
+    border-width: 2px;
+  }
+
+  .grid-cell select {
+    width: 100%;
+    font-size: 1rem;
+    padding: 10px 12px;
+    min-height: 44px;
+    border: 2px solid #3498db;
+    border-radius: 8px;
+    background: #fff;
     box-sizing: border-box;
   }
 
-  /* Input de data - fonte ainda menor e sem quebra */
   .grid-row > .grid-cell:first-child .grid-input {
-    font-size: 0.45rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 1rem;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
   }
 
   .acoes-cell {
-    justify-content: center;
-    padding: 0.3rem 0.2rem; /* Reduzido */
+    justify-content: flex-end;
+    padding: 4px 0 0;
   }
 
   .btn-delete {
-    width: 20px; /* Reduzido */
-    height: 20px;
-    font-size: 0.75rem; /* Reduzido */
-    min-width: 20px;
-    min-height: 20px;
-  }
-
-  .header-cell {
-    padding: 0.35rem 0.2rem; /* Reduzido */
-    font-size: 0.55rem; /* Reduzido */
-    text-align: center;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    width: 40px;
+    height: 40px;
+    font-size: 1.15rem;
+    min-width: 40px;
+    min-height: 40px;
   }
 }
 
 @media (max-width: 480px) {
-  .grid-wrapper {
-    font-size: 0.6rem; /* Ainda menor em telas muito pequenas */
+  .totalizadores-container {
+    grid-template-columns: 1fr;
   }
 
-  /* Totalizadores mantêm tamanho fixo - sem responsividade */
-
-  .totalizador-input {
-    font-size: 0.4rem; /* Tamanho normal para mobile pequeno */
-    padding: 0.15rem;
-    white-space: nowrap;
-  }
-
-  .grid-semana-header {
-    padding: 5px 6px; /* Reduzido ainda mais */
-  }
-
-  .grid-semana-header h3 {
-    font-size: 0.6rem; /* Reduzido ainda mais */
-  }
-
-  .grid-semana-periodo {
-    font-size: 0.5rem; /* Reduzido ainda mais */
-  }
-
-  .grid-header {
-    grid-template-columns: 65px 1fr 65px 1fr 35px 45px 28px; /* Incluindo coluna Retroativo */
-    font-size: 0.45rem; /* Reduzido ainda mais */
-    padding: 0.25rem 0.12rem; /* Reduzido ainda mais */
+  .grid-body {
+    padding: 6px;
   }
 
   .grid-row {
-    grid-template-columns: 65px 1fr 65px 1fr 35px 45px 28px; /* Incluindo coluna Retroativo */
+    padding: 8px 10px;
+    margin-bottom: 8px;
   }
 
-  .grid-cell {
-    padding: 0.18rem 0.08rem; /* Reduzido ainda mais */
-    font-size: 0.4rem; /* Reduzido ainda mais */
-    min-height: 22px; /* Reduzido ainda mais */
-  }
-
-  .grid-cell-content {
-    font-size: 0.4rem; /* Reduzido ainda mais */
-  }
-
-  .grid-input {
-    font-size: 0.4rem; /* Reduzido ainda mais */
-    padding: 0.12rem; /* Reduzido ainda mais */
-  }
-
-  /* Input de data - fonte ainda menor */
-  .grid-row > .grid-cell:first-child .grid-input {
-    font-size: 0.38rem;
-  }
-
-  .header-cell {
-    padding: 0.3rem 0.15rem; /* Reduzido */
-    font-size: 0.5rem; /* Reduzido */
-  }
-
-  .btn-delete {
-    width: 18px; /* Reduzido */
-    height: 18px;
-    font-size: 0.7rem; /* Reduzido */
-    min-width: 18px;
-    min-height: 18px;
+  .grid-semana-header h3 {
+    font-size: 0.88rem;
   }
 }
 

@@ -234,6 +234,7 @@
 
   .app-main {
     padding: 0.5rem;
+    overflow-x: hidden;
   }
 }
 
