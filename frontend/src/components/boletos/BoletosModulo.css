@@ -1,0 +1,120 @@
+.boletos {
+  width: 100%;
+}
+
+.boletos-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.boletos-head h2 {
+  margin: 0 0 0.35rem;
+  color: #2c3e50;
+}
+
+.boletos-head p,
+.boletos-hint,
+.boletos-empty,
+.boletos-total {
+  margin: 0;
+  color: #52616f;
+  line-height: 1.45;
+}
+
+.boletos-total {
+  margin-bottom: 0.75rem;
+}
+
+.boletos-abas,
+.boletos-form,
+.boletos-form-actions,
+.boletos-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.boletos-abas button,
+.boletos-actions button,
+.boletos-btn-ghost {
+  background: #fff;
+  color: #2c3e50;
+  border: 1px solid #c5d0da;
+  border-radius: 4px;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+}
+
+.boletos-abas button.active {
+  background: #2c3e50;
+  color: #fff;
+  border-color: #2c3e50;
+}
+
+.boletos-form {
+  align-items: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+.boletos-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #34495e;
+  min-width: 140px;
+}
+
+.boletos-form input,
+.boletos-form select {
+  font: inherit;
+  font-weight: 400;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid #c5d0da;
+  border-radius: 4px;
+  min-width: 140px;
+}
+
+.boletos-hint {
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.boletos-table-wrap {
+  overflow-x: auto;
+  background: #fff;
+  border: 1px solid #e1e8ee;
+  border-radius: 6px;
+}
+
+.boletos-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.boletos-table th,
+.boletos-table td {
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+  border-bottom: 1px solid #eef2f5;
+  white-space: nowrap;
+}
+
+.boletos-table th {
+  background: #f7f9fb;
+  color: #2c3e50;
+}
+
+.boletos-acima td {
+  background: #fff4f2;
+}
+
+.boletos-actions button {
+  padding: 0.25rem 0.5rem;
+}

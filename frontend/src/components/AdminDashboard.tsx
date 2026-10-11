@@ -19,6 +19,7 @@ interface Props {
   onIrParaRelatorios: () => void;
   onIrParaEstoque: (view?: 'resumo' | 'diario' | 'visao' | 'categorias' | 'produtos' | 'movimentacao') => void;
   onIrParaMovimentacaoHoje?: () => void;
+  onIrParaBoletos?: () => void;
   onIrParaRestaurantes: () => void;
   onIrParaUsuariosEstoque?: () => void;
 }
@@ -48,6 +49,7 @@ const AdminDashboard: React.FC<Props> = ({
   onIrParaRelatorios,
   onIrParaEstoque,
   onIrParaMovimentacaoHoje,
+  onIrParaBoletos,
   onIrParaRestaurantes,
   onIrParaUsuariosEstoque
 }) => {
@@ -193,6 +195,11 @@ const AdminDashboard: React.FC<Props> = ({
         <button type="button" className="admin-dashboard-btn" onClick={onIrParaGastos}>
           Gastos
         </button>
+        {onIrParaBoletos && (
+          <button type="button" className="admin-dashboard-btn admin-dashboard-btn--ghost" onClick={onIrParaBoletos}>
+            Boletos e notas
+          </button>
+        )}
         <button type="button" className="admin-dashboard-btn admin-dashboard-btn--ghost" onClick={onIrParaRelatorios}>
           Relatórios
         </button>

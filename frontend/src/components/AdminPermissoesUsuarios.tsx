@@ -16,10 +16,11 @@ export interface UsuarioPermissaoRow {
   modulo_financeiro: boolean;
   modulo_estoque: boolean;
   modulo_estoque_simplificado: boolean;
+  modulo_boletos: boolean;
   restaurante_ids: number[];
 }
 
-type ModuloKey = 'modulo_financeiro' | 'modulo_estoque' | 'modulo_estoque_simplificado';
+type ModuloKey = 'modulo_financeiro' | 'modulo_estoque' | 'modulo_estoque_simplificado' | 'modulo_boletos';
 
 interface Props {
   onError?: (msg: string | null) => void;
@@ -71,6 +72,7 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
           modulo_financeiro: usuario.modulo_financeiro,
           modulo_estoque: usuario.modulo_estoque,
           modulo_estoque_simplificado: usuario.modulo_estoque_simplificado,
+          modulo_boletos: usuario.modulo_boletos,
           restaurante_ids: usuario.restaurante_ids
         }
       );
@@ -104,14 +106,16 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
   };
 
   const precisaRestaurantes = (u: UsuarioPermissaoRow) =>
-    !u.is_admin && !u.modulo_financeiro && (u.modulo_estoque || u.modulo_estoque_simplificado);
+    !u.is_admin &&
+    !u.modulo_financeiro &&
+    (u.modulo_estoque || u.modulo_estoque_simplificado || u.modulo_boletos);
 
   return (
     <div className="admin-perm">
       <h1 className="admin-perm-title">Permissões de usuários</h1>
       <p className="admin-perm-hint">
-        Marque os módulos que cada usuário pode acessar. Usuários com estoque (completo ou simplificado) sem
-        financeiro precisam de restaurantes liberados na linha expandida abaixo.
+        Marque os módulos que cada usuário pode acessar. Quem não tem o financeiro e usa estoque ou boletos
+        precisa de restaurantes liberados na linha expandida abaixo.
       </p>
 
       {banner && (
@@ -136,6 +140,7 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
                 <th className="admin-perm-th-check">Financeiro</th>
                 <th className="admin-perm-th-check">Estoque</th>
                 <th className="admin-perm-th-check">Estoque simplificado</th>
+                <th className="admin-perm-th-check">Boletos e notas</th>
               </tr>
             </thead>
             <tbody>
@@ -180,10 +185,20 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
                         />
                       </label>
                     </td>
+                    <td className="admin-perm-td-check">
+                      <label className="admin-perm-check">
+                        <input
+                          type="checkbox"
+                          checked={u.is_admin || !!u.modulo_boletos}
+                          disabled={u.is_admin || savingId === u.id}
+                          onChange={() => toggleModulo(u, 'modulo_boletos')}
+                        />
+                      </label>
+                    </td>
                   </tr>
                   {precisaRestaurantes(u) && (
                     <tr className="admin-perm-rest-row">
-                      <td colSpan={4}>
+                      <td colSpan={5}>
                         <fieldset className="admin-perm-rest-fieldset">
                           <legend className="admin-perm-rest-legend">Restaurantes liberados</legend>
                           {restaurantes.length === 0 ? (

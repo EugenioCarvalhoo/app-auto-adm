@@ -14,6 +14,12 @@ const {
   parseEstoqueQuantidadeInt,
   normalizeQuantidadeInt
 } = require('./lib/estoqueQuantidade');
+const {
+  intervaloSemana,
+  normalizarTipo,
+  vencimentoEfetivo,
+  grupoSemana
+} = require('./lib/boletosSemana');
 
 const MAX_ESTOQUE_FOTO_URL_LEN = 400000;
 
@@ -51,6 +57,17 @@ const requireModuloEstoqueSimplificado = async (req, res, next) => {
   return res.status(403).json({ error: 'Sem permissão para o lançamento diário de estoque.' });
 };
 
+const requireModuloBoletos = async (req, res, next) => {
+  const flags = await loadUserFlags(req.user.id);
+  if (!flags) {
+    return res.status(403).json({ error: 'Usuário inválido.' });
+  }
+  if (flags.is_admin || flags.modulo_boletos) {
+    return next();
+  }
+  return res.status(403).json({ error: 'Sem permissão para o módulo de boletos e notas.' });
+};
+
 const requireAdmin = (req, res, next) => {
   if (!req.user || !req.user.is_admin) {
     return res.status(403).json({ error: 'Apenas administradores podem realizar esta ação.' });
@@ -59,7 +76,41 @@ const requireAdmin = (req, res, next) => {
 };
 
 /** Flags atuais do usuário (DB — não confiar só no JWT). */
+function withAdminModules(row, extra = {}) {
+  if (!row) return null;
+  const base = {
+    ...row,
+    ...extra,
+    modulo_boletos: extra.modulo_boletos !== undefined ? !!extra.modulo_boletos : !!row.modulo_boletos
+  };
+  if (row.is_admin) {
+    return {
+      ...base,
+      modulo_financeiro: true,
+      modulo_estoque: true,
+      modulo_estoque_simplificado: true,
+      modulo_boletos: true
+    };
+  }
+  return base;
+}
+
 async function loadUserFlags(userId) {
+  try {
+    const r = await pool.query(
+      `SELECT id, is_admin,
+        COALESCE(somente_estoque, false) AS somente_estoque,
+        COALESCE(modulo_financeiro, false) AS modulo_financeiro,
+        COALESCE(modulo_estoque, false) AS modulo_estoque,
+        COALESCE(modulo_estoque_simplificado, false) AS modulo_estoque_simplificado,
+        COALESCE(modulo_boletos, false) AS modulo_boletos
+       FROM usuarios WHERE id = $1`,
+      [userId]
+    );
+    return withAdminModules(r.rows[0]);
+  } catch (err) {
+    if (err.code !== '42703') throw err;
+  }
   try {
     const r = await pool.query(
       `SELECT id, is_admin,
@@ -72,15 +123,9 @@ async function loadUserFlags(userId) {
     );
     const row = r.rows[0];
     if (!row) return null;
-    if (row.is_admin) {
-      return {
-        ...row,
-        modulo_financeiro: true,
-        modulo_estoque: true,
-        modulo_estoque_simplificado: true
-      };
-    }
-    return row;
+    return withAdminModules(row, {
+      modulo_boletos: !!row.is_admin || !!row.modulo_financeiro
+    });
   } catch (err) {
     if (err.code !== '42703') throw err;
     const r = await pool.query(
@@ -94,7 +139,8 @@ async function loadUserFlags(userId) {
       ...row,
       modulo_financeiro: !!row.is_admin || !row.somente_estoque,
       modulo_estoque: !!row.is_admin || legadoEstoque,
-      modulo_estoque_simplificado: !!row.is_admin
+      modulo_estoque_simplificado: !!row.is_admin,
+      modulo_boletos: !!row.is_admin
     };
   }
 }
@@ -103,10 +149,7 @@ async function shapeUserForClient(userRow) {
   const flags = await loadUserFlags(userRow.id);
   if (!flags) return null;
   let restauranteIds = [];
-  const restrito =
-    !flags.is_admin &&
-    !flags.modulo_financeiro &&
-    (flags.modulo_estoque || flags.modulo_estoque_simplificado);
+  const restrito = usuarioRestaurantesRestritos(flags);
   if (restrito) {
     restauranteIds = await restauranteIdsUsuarioEstoque(userRow.id);
   }
@@ -118,6 +161,7 @@ async function shapeUserForClient(userRow) {
     modulo_financeiro: !!flags.modulo_financeiro,
     modulo_estoque: !!flags.modulo_estoque,
     modulo_estoque_simplificado: !!flags.modulo_estoque_simplificado,
+    modulo_boletos: !!flags.modulo_boletos,
     restaurante_ids: restauranteIds,
     somente_estoque: restrito
   };
@@ -127,7 +171,7 @@ function usuarioRestaurantesRestritos(flags) {
   return (
     !flags.is_admin &&
     !flags.modulo_financeiro &&
-    (flags.modulo_estoque || flags.modulo_estoque_simplificado)
+    (flags.modulo_estoque || flags.modulo_estoque_simplificado || flags.modulo_boletos)
   );
 }
 
@@ -173,6 +217,108 @@ async function assertEstoqueAcessoRestaurante(req, res, restauranteId) {
   res.status(403).json({ error: 'Sem permissão para acessar estoque.' });
   return false;
 }
+
+async function assertBoletosAcessoRestaurante(req, res, restauranteId) {
+  const rid = parseInt(restauranteId, 10);
+  if (Number.isNaN(rid)) {
+    res.status(400).json({ error: 'restaurante_id inválido' });
+    return false;
+  }
+  const flags = await loadUserFlags(req.user.id);
+  if (!flags) {
+    res.status(403).json({ error: 'Usuário inválido.' });
+    return false;
+  }
+  if (!(flags.is_admin || flags.modulo_boletos)) {
+    res.status(403).json({ error: 'Sem permissão para o módulo de boletos e notas.' });
+    return false;
+  }
+  if (flags.is_admin || flags.modulo_financeiro) return true;
+  const ok = await usuarioSomenteEstoquePodeRestaurante(req.user.id, rid);
+  if (!ok) {
+    res.status(403).json({ error: 'Sem permissão para os boletos deste restaurante.' });
+    return false;
+  }
+  return true;
+}
+
+function dateToIso(value) {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    const text = value.slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  return null;
+}
+
+function parseValorBoleto(raw) {
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (typeof raw === 'number') {
+    if (!Number.isFinite(raw) || raw < 0) return null;
+    return Math.round(raw * 100) / 100;
+  }
+  const text = String(raw).trim().replace(/\s/g, '').replace(/^R\$/i, '');
+  if (!text) return null;
+  const normalized = text.includes(',') ? text.replace(/\./g, '').replace(',', '.') : text;
+  const value = Number(normalized);
+  if (!Number.isFinite(value) || value < 0) return null;
+  return Math.round(value * 100) / 100;
+}
+
+function erroTabelaBoletos(error, res) {
+  if (error.code === '42P01' || error.code === '42703') {
+    res.status(503).json({ error: 'Módulo de boletos não instalado. Rode a migração 014.' });
+    return true;
+  }
+  return false;
+}
+
+function enriquecerBoleto(row) {
+  const dtRecebimento = dateToIso(row.dt_recebimento);
+  const dtVencimento = dateToIso(row.dt_vencimento);
+  const tipo = normalizarTipo(row.tipo);
+  const efetivo = vencimentoEfetivo(dtRecebimento, dtVencimento, tipo);
+  const semana = grupoSemana(dtRecebimento, dtVencimento, tipo);
+  return {
+    id: row.id,
+    restaurante_id: row.restaurante_id,
+    usuario_id: row.usuario_id,
+    dt_recebimento: dtRecebimento,
+    dt_vencimento: dtVencimento,
+    descricao: row.descricao || '',
+    valor: Number(row.valor),
+    tipo,
+    dt_vencimento_efetivo: efetivo,
+    semana_chave: semana ? semana.chave : null,
+    semana_inicio: semana ? semana.inicio : null,
+    semana_fim: semana ? semana.fim : null,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
+function enriquecerMeta(row) {
+  return {
+    id: row.id,
+    restaurante_id: row.restaurante_id,
+    data_referencia: dateToIso(row.data_referencia),
+    semana_chave: row.semana_chave,
+    semana_inicio: dateToIso(row.semana_inicio),
+    semana_fim: dateToIso(row.semana_fim),
+    maximo_gasto: Number(row.maximo_gasto),
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
+const BOLETO_SELECT = `id, restaurante_id, usuario_id, dt_recebimento, dt_vencimento, descricao, valor, tipo, created_at, updated_at`;
+const META_SELECT = `id, restaurante_id, data_referencia, semana_chave, semana_inicio, semana_fim, maximo_gasto, created_at, updated_at`;
 
 function parseTipoMovimento(tipoRaw) {
   const t = String(tipoRaw || '').trim().toLowerCase();
@@ -338,6 +484,7 @@ async function loginHandler(req, res) {
         modulo_financeiro: shaped.modulo_financeiro,
         modulo_estoque: shaped.modulo_estoque,
         modulo_estoque_simplificado: shaped.modulo_estoque_simplificado,
+        modulo_boletos: shaped.modulo_boletos,
         somente_estoque: shaped.somente_estoque
       },
       JWT_SECRET,
@@ -1816,6 +1963,338 @@ app.delete('/api/estoque/lancamentos-diarios/:id', authenticateToken, requireMod
   }
 });
 
+// ========== Boletos e notas ==========
+
+app.get('/api/boletos/resumo', authenticateToken, requireModuloBoletos, async (req, res) => {
+  try {
+    const rid = parseInt(req.query.restaurante_id, 10);
+    if (Number.isNaN(rid)) {
+      return res.status(400).json({ error: 'restaurante_id é obrigatório' });
+    }
+    const pode = await assertBoletosAcessoRestaurante(req, res, rid);
+    if (!pode) return;
+
+    const [boletos, metas] = await Promise.all([
+      pool.query(
+        `SELECT ${BOLETO_SELECT} FROM boletos_notas WHERE restaurante_id = $1 ORDER BY dt_recebimento ASC, id ASC`,
+        [rid]
+      ),
+      pool.query(
+        `SELECT ${META_SELECT} FROM boletos_metas_gasto WHERE restaurante_id = $1 ORDER BY semana_inicio ASC`,
+        [rid]
+      )
+    ]);
+
+    const porSemana = new Map();
+    boletos.rows.forEach((row) => {
+      const item = enriquecerBoleto(row);
+      if (!item.semana_chave) return;
+      const atual = porSemana.get(item.semana_chave) || {
+        chave: item.semana_chave,
+        inicio: item.semana_inicio,
+        fim: item.semana_fim,
+        total: 0,
+        quantidade: 0,
+        maximo: null
+      };
+      atual.total = Math.round((atual.total + item.valor) * 100) / 100;
+      atual.quantidade += 1;
+      porSemana.set(item.semana_chave, atual);
+    });
+
+    metas.rows.forEach((row) => {
+      const meta = enriquecerMeta(row);
+      const atual = porSemana.get(meta.semana_chave) || {
+        chave: meta.semana_chave,
+        inicio: meta.semana_inicio,
+        fim: meta.semana_fim,
+        total: 0,
+        quantidade: 0,
+        maximo: null
+      };
+      atual.maximo = meta.maximo_gasto;
+      porSemana.set(meta.semana_chave, atual);
+    });
+
+    const semanas = [...porSemana.values()]
+      .sort((a, b) => a.chave.localeCompare(b.chave))
+      .map((semana) => ({
+        ...semana,
+        saldo: semana.maximo == null ? null : Math.round((semana.maximo - semana.total) * 100) / 100
+      }));
+    const totalGeral = Math.round(semanas.reduce((acc, semana) => acc + semana.total, 0) * 100) / 100;
+
+    res.json({ semanas, total_geral: totalGeral });
+  } catch (error) {
+    if (erroTabelaBoletos(error, res)) return;
+    console.error('Erro ao resumir boletos:', error);
+    res.status(500).json({ error: 'Erro ao calcular o total da semana' });
+  }
+});
+
+app.get('/api/boletos', authenticateToken, requireModuloBoletos, async (req, res) => {
+  try {
+    const rid = parseInt(req.query.restaurante_id, 10);
+    if (Number.isNaN(rid)) {
+      return res.status(400).json({ error: 'restaurante_id é obrigatório' });
+    }
+    const pode = await assertBoletosAcessoRestaurante(req, res, rid);
+    if (!pode) return;
+    const result = await pool.query(
+      `SELECT ${BOLETO_SELECT} FROM boletos_notas WHERE restaurante_id = $1 ORDER BY dt_recebimento DESC NULLS LAST, id DESC`,
+      [rid]
+    );
+    res.json(result.rows.map(enriquecerBoleto));
+  } catch (error) {
+    if (erroTabelaBoletos(error, res)) return;
+    console.error('Erro ao listar boletos:', error);
+    res.status(500).json({ error: 'Erro ao listar boletos e notas' });
+  }
+});
+
+app.post('/api/boletos', authenticateToken, requireModuloBoletos, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const rid = parseInt(body.restaurante_id, 10);
+    if (Number.isNaN(rid)) {
+      return res.status(400).json({ error: 'restaurante_id é obrigatório' });
+    }
+    const pode = await assertBoletosAcessoRestaurante(req, res, rid);
+    if (!pode) return;
+
+    const descricao = body.descricao != null ? String(body.descricao).trim() : '';
+    if (!descricao) {
+      return res.status(400).json({ error: 'Descrição é obrigatória' });
+    }
+    const valor = parseValorBoleto(body.valor);
+    if (valor == null) {
+      return res.status(400).json({ error: 'Valor inválido' });
+    }
+    const tipo = normalizarTipo(body.tipo);
+    const dtRecebimento = body.dt_recebimento ? parseDateOnly(String(body.dt_recebimento).slice(0, 10)) : null;
+    if (!dtRecebimento) {
+      return res.status(400).json({ error: 'Data de recebimento é obrigatória' });
+    }
+    let dtVencimento = null;
+    if (tipo === 'Boleto') {
+      dtVencimento = body.dt_vencimento ? parseDateOnly(String(body.dt_vencimento).slice(0, 10)) : null;
+      if (!dtVencimento) {
+        return res.status(400).json({ error: 'Data de vencimento é obrigatória para boleto' });
+      }
+    } else if (body.dt_vencimento) {
+      dtVencimento = parseDateOnly(String(body.dt_vencimento).slice(0, 10));
+    }
+
+    const result = await pool.query(
+      `INSERT INTO boletos_notas (restaurante_id, usuario_id, dt_recebimento, dt_vencimento, descricao, valor, tipo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING ${BOLETO_SELECT}`,
+      [rid, req.user.id, dtRecebimento, dtVencimento, descricao, valor, tipo]
+    );
+    res.status(201).json(enriquecerBoleto(result.rows[0]));
+  } catch (error) {
+    if (erroTabelaBoletos(error, res)) return;
+    console.error('Erro ao criar boleto:', error);
+    res.status(500).json({ error: 'Erro ao cadastrar boleto ou nota' });
+  }
+});
+
+app.put('/api/boletos/:id', authenticateToken, requireModuloBoletos, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: 'id inválido' });
+    }
+    const existing = await pool.query(`SELECT ${BOLETO_SELECT} FROM boletos_notas WHERE id = $1`, [id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Lançamento não encontrado' });
+    }
+    const atual = existing.rows[0];
+    const pode = await assertBoletosAcessoRestaurante(req, res, atual.restaurante_id);
+    if (!pode) return;
+
+    const body = req.body || {};
+    const descricao = body.descricao !== undefined ? String(body.descricao).trim() : atual.descricao;
+    if (!descricao) {
+      return res.status(400).json({ error: 'Descrição é obrigatória' });
+    }
+    const valor = body.valor !== undefined ? parseValorBoleto(body.valor) : Number(atual.valor);
+    if (valor == null) {
+      return res.status(400).json({ error: 'Valor inválido' });
+    }
+    const tipo = body.tipo !== undefined ? normalizarTipo(body.tipo) : normalizarTipo(atual.tipo);
+    const dtRecebimento = body.dt_recebimento !== undefined
+      ? parseDateOnly(String(body.dt_recebimento || '').slice(0, 10))
+      : dateToIso(atual.dt_recebimento);
+    if (!dtRecebimento) {
+      return res.status(400).json({ error: 'Data de recebimento é obrigatória' });
+    }
+    let dtVencimento = dateToIso(atual.dt_vencimento);
+    if (body.dt_vencimento !== undefined) {
+      dtVencimento = body.dt_vencimento
+        ? parseDateOnly(String(body.dt_vencimento).slice(0, 10))
+        : null;
+    }
+    if (tipo === 'Boleto' && !dtVencimento) {
+      return res.status(400).json({ error: 'Data de vencimento é obrigatória para boleto' });
+    }
+
+    const result = await pool.query(
+      `UPDATE boletos_notas
+       SET dt_recebimento = $1, dt_vencimento = $2, descricao = $3, valor = $4, tipo = $5, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $6
+       RETURNING ${BOLETO_SELECT}`,
+      [dtRecebimento, dtVencimento, descricao, valor, tipo, id]
+    );
+    res.json(enriquecerBoleto(result.rows[0]));
+  } catch (error) {
+    if (erroTabelaBoletos(error, res)) return;
+    console.error('Erro ao atualizar boleto:', error);
+    res.status(500).json({ error: 'Erro ao atualizar boleto ou nota' });
+  }
+});
+
+app.delete('/api/boletos/:id', authenticateToken, requireModuloBoletos, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: 'id inválido' });
+    }
+    const existing = await pool.query('SELECT restaurante_id FROM boletos_notas WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Lançamento não encontrado' });
+    }
+    const pode = await assertBoletosAcessoRestaurante(req, res, existing.rows[0].restaurante_id);
+    if (!pode) return;
+    await pool.query('DELETE FROM boletos_notas WHERE id = $1', [id]);
+    res.json({ message: 'Lançamento removido', id });
+  } catch (error) {
+    if (erroTabelaBoletos(error, res)) return;
+    console.error('Erro ao remover boleto:', error);
+    res.status(500).json({ error: 'Erro ao remover boleto ou nota' });
+  }
+});
+
+app.get('/api/boletos/metas', authenticateToken, requireModuloBoletos, async (req, res) => {
+  try {
+    const rid = parseInt(req.query.restaurante_id, 10);
+    if (Number.isNaN(rid)) {
+      return res.status(400).json({ error: 'restaurante_id é obrigatório' });
+    }
+    const pode = await assertBoletosAcessoRestaurante(req, res, rid);
+    if (!pode) return;
+    const result = await pool.query(
+      `SELECT ${META_SELECT} FROM boletos_metas_gasto WHERE restaurante_id = $1 ORDER BY semana_inicio DESC`,
+      [rid]
+    );
+    res.json(result.rows.map(enriquecerMeta));
+  } catch (error) {
+    if (erroTabelaBoletos(error, res)) return;
+    console.error('Erro ao listar metas:', error);
+    res.status(500).json({ error: 'Erro ao listar metas de gasto' });
+  }
+});
+
+app.post('/api/boletos/metas', authenticateToken, requireModuloBoletos, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const rid = parseInt(body.restaurante_id, 10);
+    if (Number.isNaN(rid)) {
+      return res.status(400).json({ error: 'restaurante_id é obrigatório' });
+    }
+    const pode = await assertBoletosAcessoRestaurante(req, res, rid);
+    if (!pode) return;
+    const dataReferencia = parseDateOnly(String(body.data_referencia || '').slice(0, 10));
+    if (!dataReferencia) {
+      return res.status(400).json({ error: 'Informe uma data dentro da semana da meta' });
+    }
+    const maximo = parseValorBoleto(body.maximo_gasto);
+    if (maximo == null) {
+      return res.status(400).json({ error: 'Máximo de gasto inválido' });
+    }
+    const semana = intervaloSemana(dataReferencia);
+    const result = await pool.query(
+      `INSERT INTO boletos_metas_gasto (restaurante_id, data_referencia, semana_chave, semana_inicio, semana_fim, maximo_gasto)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (restaurante_id, semana_chave)
+       DO UPDATE SET data_referencia = EXCLUDED.data_referencia,
+                     maximo_gasto = EXCLUDED.maximo_gasto,
+                     updated_at = CURRENT_TIMESTAMP
+       RETURNING ${META_SELECT}`,
+      [rid, dataReferencia, semana.chave, semana.inicio, semana.fim, maximo]
+    );
+    res.status(201).json(enriquecerMeta(result.rows[0]));
+  } catch (error) {
+    if (erroTabelaBoletos(error, res)) return;
+    console.error('Erro ao salvar meta:', error);
+    res.status(500).json({ error: 'Erro ao salvar meta de gasto' });
+  }
+});
+
+app.put('/api/boletos/metas/:id', authenticateToken, requireModuloBoletos, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: 'id inválido' });
+    }
+    const existing = await pool.query(`SELECT ${META_SELECT} FROM boletos_metas_gasto WHERE id = $1`, [id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Meta não encontrada' });
+    }
+    const atual = existing.rows[0];
+    const pode = await assertBoletosAcessoRestaurante(req, res, atual.restaurante_id);
+    if (!pode) return;
+    const body = req.body || {};
+    const dataReferencia = body.data_referencia !== undefined
+      ? parseDateOnly(String(body.data_referencia || '').slice(0, 10))
+      : dateToIso(atual.data_referencia);
+    if (!dataReferencia) {
+      return res.status(400).json({ error: 'Informe uma data dentro da semana da meta' });
+    }
+    const maximo = body.maximo_gasto !== undefined ? parseValorBoleto(body.maximo_gasto) : Number(atual.maximo_gasto);
+    if (maximo == null) {
+      return res.status(400).json({ error: 'Máximo de gasto inválido' });
+    }
+    const semana = intervaloSemana(dataReferencia);
+    const result = await pool.query(
+      `UPDATE boletos_metas_gasto
+       SET data_referencia = $1, semana_chave = $2, semana_inicio = $3, semana_fim = $4, maximo_gasto = $5, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $6
+       RETURNING ${META_SELECT}`,
+      [dataReferencia, semana.chave, semana.inicio, semana.fim, maximo, id]
+    );
+    res.json(enriquecerMeta(result.rows[0]));
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Já existe meta para esta semana.' });
+    }
+    if (erroTabelaBoletos(error, res)) return;
+    console.error('Erro ao atualizar meta:', error);
+    res.status(500).json({ error: 'Erro ao atualizar meta de gasto' });
+  }
+});
+
+app.delete('/api/boletos/metas/:id', authenticateToken, requireModuloBoletos, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: 'id inválido' });
+    }
+    const existing = await pool.query('SELECT restaurante_id FROM boletos_metas_gasto WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Meta não encontrada' });
+    }
+    const pode = await assertBoletosAcessoRestaurante(req, res, existing.rows[0].restaurante_id);
+    if (!pode) return;
+    await pool.query('DELETE FROM boletos_metas_gasto WHERE id = $1', [id]);
+    res.json({ message: 'Meta removida', id });
+  } catch (error) {
+    if (erroTabelaBoletos(error, res)) return;
+    console.error('Erro ao remover meta:', error);
+    res.status(500).json({ error: 'Erro ao remover meta de gasto' });
+  }
+});
+
 // ========== Admin: permissões por módulo ==========
 
 async function listarRestauranteIdsUsuario(userId) {
@@ -1849,7 +2328,8 @@ app.get('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, async
       `SELECT u.id, u.username, u.nome, u.is_admin,
         COALESCE(u.modulo_financeiro, false) AS modulo_financeiro,
         COALESCE(u.modulo_estoque, false) AS modulo_estoque,
-        COALESCE(u.modulo_estoque_simplificado, false) AS modulo_estoque_simplificado
+        COALESCE(u.modulo_estoque_simplificado, false) AS modulo_estoque_simplificado,
+        COALESCE(u.modulo_boletos, false) AS modulo_boletos
        FROM usuarios u
        ORDER BY u.is_admin DESC, u.nome ASC`
     );
@@ -1860,7 +2340,8 @@ app.get('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, async
             ...row,
             modulo_financeiro: true,
             modulo_estoque: true,
-            modulo_estoque_simplificado: true
+            modulo_estoque_simplificado: true,
+            modulo_boletos: true
           }
         : row;
       const restaurante_ids = await listarRestauranteIdsUsuario(row.id);
@@ -1872,13 +2353,14 @@ app.get('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, async
         modulo_financeiro: !!flags.modulo_financeiro,
         modulo_estoque: !!flags.modulo_estoque,
         modulo_estoque_simplificado: !!flags.modulo_estoque_simplificado,
+        modulo_boletos: !!flags.modulo_boletos,
         restaurante_ids
       });
     }
     res.json(rows);
   } catch (error) {
     if (error.code === '42703') {
-      return res.status(503).json({ error: 'Migração 013 (permissões por módulo) pendente.' });
+      return res.status(503).json({ error: 'Migração de permissões pendente (013 ou 014).' });
     }
     console.error('Erro ao listar permissões:', error);
     res.status(500).json({ error: 'Erro ao listar permissões de usuários' });
@@ -1905,12 +2387,13 @@ app.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin, a
     const moduloFinanceiro = body.modulo_financeiro === true;
     const moduloEstoque = body.modulo_estoque === true;
     const moduloEstoqueSimplificado = body.modulo_estoque_simplificado === true;
+    const moduloBoletos = body.modulo_boletos === true;
 
-    if (!moduloFinanceiro && !moduloEstoque && !moduloEstoqueSimplificado) {
+    if (!moduloFinanceiro && !moduloEstoque && !moduloEstoqueSimplificado && !moduloBoletos) {
       return res.status(400).json({ error: 'Marque ao menos um módulo para o usuário.' });
     }
 
-    const restrito = !moduloFinanceiro && (moduloEstoque || moduloEstoqueSimplificado);
+    const restrito = !moduloFinanceiro && (moduloEstoque || moduloEstoqueSimplificado || moduloBoletos);
     let restauranteIds = [];
     if (restrito) {
       restauranteIds = Array.isArray(body.restaurante_ids)
@@ -1918,12 +2401,12 @@ app.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin, a
         : await listarRestauranteIdsUsuario(userId);
       if (restauranteIds.length === 0) {
         return res.status(400).json({
-          error: 'Usuário só com módulos de estoque precisa de ao menos um restaurante liberado.'
+          error: 'Usuário sem módulo financeiro precisa de ao menos um restaurante liberado.'
         });
       }
     }
 
-    const somenteEstoqueLegacy = restrito;
+    const somenteEstoqueLegacy = !moduloFinanceiro && (moduloEstoque || moduloEstoqueSimplificado);
 
     await client.query('BEGIN');
     await client.query(
@@ -1931,10 +2414,11 @@ app.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin, a
        SET modulo_financeiro = $1,
            modulo_estoque = $2,
            modulo_estoque_simplificado = $3,
-           somente_estoque = $4,
+           modulo_boletos = $4,
+           somente_estoque = $5,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $5`,
-      [moduloFinanceiro, moduloEstoque, moduloEstoqueSimplificado, somenteEstoqueLegacy, userId]
+       WHERE id = $6`,
+      [moduloFinanceiro, moduloEstoque, moduloEstoqueSimplificado, moduloBoletos, somenteEstoqueLegacy, userId]
     );
 
     if (restrito) {
@@ -1954,12 +2438,13 @@ app.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin, a
       modulo_financeiro: moduloFinanceiro,
       modulo_estoque: moduloEstoque,
       modulo_estoque_simplificado: moduloEstoqueSimplificado,
+      modulo_boletos: moduloBoletos,
       restaurante_ids: restauranteIds
     });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     if (error.code === '42703') {
-      return res.status(503).json({ error: 'Migração 013 (permissões por módulo) pendente.' });
+      return res.status(503).json({ error: 'Migração de permissões pendente (013 ou 014).' });
     }
     console.error('Erro ao atualizar permissões:', error);
     res.status(500).json({ error: 'Erro ao atualizar permissões' });

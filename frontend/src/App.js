@@ -8,6 +8,7 @@ import Relatorios from './components/Relatorios';
 import EstoqueShell from './components/estoque/EstoqueShell';
 import AdminDashboard from './components/AdminDashboard';
 import AdminPermissoesUsuarios from './components/AdminPermissoesUsuarios';
+import BoletosModulo from './components/boletos/BoletosModulo';
 import {
   estoqueViewInicial,
   permissoesUsuario,
@@ -97,13 +98,18 @@ function App() {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || user.is_admin) return;
     const p = permissoesUsuario(user);
-    if (!p.financeiro && !user.is_admin && (p.estoque || p.estoqueSimplificado)) {
-      setTelaAtual('estoque');
-      setEstoqueView(estoqueViewInicial(user));
+    const telaFinanceira = telaAtual === 'gastos' || telaAtual === 'relatorios' || telaAtual === 'restaurantes';
+    if (telaFinanceira && !p.financeiro) {
+      setTelaAtual(telaInicialUsuario(user));
+      if (p.estoque || p.estoqueSimplificado) setEstoqueView(estoqueViewInicial(user));
+    } else if (telaAtual === 'boletos' && !p.boletos) {
+      setTelaAtual(telaInicialUsuario(user));
+    } else if (telaAtual === 'estoque' && !p.estoque && !p.estoqueSimplificado) {
+      setTelaAtual(telaInicialUsuario(user));
     }
-  }, [user]);
+  }, [user, telaAtual]);
 
   useEffect(() => {
     if (telaAtual === 'inicio' && user && !user.is_admin) {
@@ -328,9 +334,14 @@ function App() {
   const acessoFinanceiro = perms.financeiro;
   const acessoEstoque = perms.estoque;
   const acessoEstoqueSimplificado = perms.estoqueSimplificado;
+  const acessoBoletos = perms.boletos;
   const acessoQualquerEstoque = acessoEstoque || acessoEstoqueSimplificado;
   const tituloApp =
-    !acessoFinanceiro && acessoQualquerEstoque ? 'Estoque' : 'Controle Financeiro - Multi Restaurante';
+    acessoBoletos && !acessoFinanceiro && !acessoQualquerEstoque
+      ? 'Boletos e Notas'
+      : !acessoFinanceiro && acessoQualquerEstoque
+        ? 'Estoque'
+        : 'Controle Financeiro - Multi Restaurante';
 
   if (loading && acessoFinanceiro) {
     return (
@@ -406,6 +417,15 @@ function App() {
                 Início
               </button>
             )}
+            {acessoBoletos && (
+              <button
+                type="button"
+                onClick={() => setTelaAtual('boletos')}
+                className={telaAtual === 'boletos' ? 'nav-tab active' : 'nav-tab'}
+              >
+                Boletos e notas
+              </button>
+            )}
             {acessoFinanceiro && (
               <>
                 <button
@@ -468,9 +488,10 @@ function App() {
           </div>
           {(telaAtual === 'gastos' ||
             telaAtual === 'estoque' ||
+            telaAtual === 'boletos' ||
             telaAtual === 'inicio' ||
             telaAtual === 'relatorios' ||
-            (acessoQualquerEstoque && !acessoFinanceiro)) &&
+            ((acessoQualquerEstoque || acessoBoletos) && !acessoFinanceiro)) &&
             restaurantes.length > 0 && (
             <select
               value={restauranteSelecionado || ''}
@@ -520,6 +541,7 @@ function App() {
             onIrParaRelatorios={() => setTelaAtual('relatorios')}
             onIrParaEstoque={(view) => irParaEstoque(view || 'resumo')}
             onIrParaMovimentacaoHoje={() => irParaEstoque('movimentacao', { periodoHoje: true })}
+            onIrParaBoletos={() => setTelaAtual('boletos')}
             onIrParaRestaurantes={() => setTelaAtual('restaurantes')}
             onIrParaUsuariosEstoque={() => {
               setError(null);
@@ -544,6 +566,17 @@ function App() {
               onViewChange={setEstoqueView}
               onMessage={setMsgEstoque}
               movimentoPeriodoPreset={estoqueMovPresetPeriodo}
+            />
+          )
+        ) : telaAtual === 'boletos' && acessoBoletos ? (
+          restaurantes.length === 0 || !restauranteSelecionado ? (
+            <div className="empty-state">
+              <p>Nenhum restaurante disponível para lançar boletos e notas.</p>
+            </div>
+          ) : (
+            <BoletosModulo
+              restauranteId={restauranteSelecionado}
+              onMessage={setError}
             />
           )
         ) : telaAtual === 'gastos' && acessoFinanceiro ? (

@@ -31,7 +31,10 @@ async function migrate() {
       '008_estoque_movimentos.sql',
       '009_estoque_movimentos_operacao_estorno.sql',
       '010_estoque_movimentos_trigger_defaults.sql',
-      '011_estoque_produto_critica_foto.sql'
+      '011_estoque_produto_critica_foto.sql',
+      '012_estoque_lancamentos_diarios.sql',
+      '013_usuario_modulos_permissao.sql',
+      '014_boletos_notas.sql'
     ];
     
     for (const migrationFile of migrations) {
