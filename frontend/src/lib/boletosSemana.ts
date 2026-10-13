@@ -43,6 +43,14 @@ function weekdayMonday1(date: Date): number {
   return js === 0 ? 7 : js;
 }
 
+export function hojeIso(): string {
+  const agora = new Date();
+  const ano = agora.getFullYear();
+  const mes = String(agora.getMonth() + 1).padStart(2, '0');
+  const dia = String(agora.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
+}
+
 export function intervaloSemana(iso: string | null | undefined): IntervaloSemana | null {
   const date = parseIsoDate(iso);
   if (!date) return null;

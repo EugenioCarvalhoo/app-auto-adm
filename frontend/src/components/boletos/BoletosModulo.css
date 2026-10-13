@@ -60,6 +60,110 @@
   margin-bottom: 0.75rem;
 }
 
+.boletos-form--lancamento {
+  flex-direction: column;
+  align-items: stretch;
+  max-width: none;
+  margin-bottom: 0.85rem;
+  gap: 0.85rem;
+}
+
+.boletos-avista {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  background: #f4f7fb;
+  border-radius: 6px;
+  color: #34495e;
+  font-size: 0.9rem;
+}
+
+.boletos-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.boletos-filtros label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #34495e;
+}
+
+.boletos-filtros input,
+.boletos-filtros select {
+  font: inherit;
+  font-weight: 400;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid #c5d0da;
+  border-radius: 4px;
+}
+
+.boletos-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.boletos-card {
+  background: #fff;
+  border: 1px solid #e1e8ee;
+  border-radius: 8px;
+  padding: 0.9rem;
+}
+
+.boletos-card h3 {
+  margin: 0.2rem 0 0.45rem;
+  color: #2c3e50;
+  font-size: 1.05rem;
+}
+
+.boletos-card p {
+  margin: 0.15rem 0;
+  color: #52616f;
+  font-size: 0.88rem;
+}
+
+.boletos-card-tipo {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #2c3e50;
+}
+
+.boletos-card-valor {
+  font-size: 1.15rem !important;
+  font-weight: 700;
+  color: #1e293b !important;
+  margin-bottom: 0.45rem !important;
+}
+
+.boletos-card .boletos-actions {
+  margin-top: 0.7rem;
+}
+
+.boletos-next {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 1000;
+  background: #1f9d55;
+  color: #fff;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.9rem 1.35rem;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: 0 10px 24px rgba(31, 157, 85, 0.35);
+  cursor: pointer;
+}
+
 .boletos-form label {
   display: flex;
   flex-direction: column;
@@ -117,4 +221,196 @@
 
 .boletos-actions button {
   padding: 0.25rem 0.5rem;
+}
+
+.boletos-lancamento {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 1.15rem;
+  align-items: start;
+}
+
+.boletos-cadastro-card,
+.boletos-registros {
+  background: #fff;
+  border: 1px solid #e6ebf0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  padding: 1.15rem 1.2rem 1.2rem;
+}
+
+.boletos-cadastro-head,
+.boletos-registros-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.boletos-cadastro-head h3,
+.boletos-registros-head h3 {
+  margin: 0;
+  color: #1f2933;
+  font-size: 1.05rem;
+}
+
+.boletos-registros-head p {
+  margin: 0;
+  color: #52616f;
+  font-size: 0.88rem;
+  text-align: right;
+}
+
+.boletos-registros-head strong {
+  color: #1f2933;
+}
+
+.boletos-modo {
+  background: #e8f8ee;
+  color: #178a45;
+  border-radius: 999px;
+  padding: 0.22rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.boletos-req {
+  color: #e11d48;
+}
+
+.boletos-form--lancamento label {
+  min-width: 0;
+  color: #3d4a57;
+}
+
+.boletos-form--lancamento input,
+.boletos-form--lancamento select {
+  min-width: 0;
+  width: 100%;
+  padding: 0.62rem 0.7rem;
+  border: 1px solid #d5dee6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.boletos-btn-adicionar {
+  width: 100%;
+  margin-top: 0.15rem;
+  background: #1f9d55;
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.boletos-btn-adicionar:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.boletos-btn-cancelar {
+  width: 100%;
+  justify-content: center;
+}
+
+.boletos-preview {
+  margin: 0.15rem 0 0;
+  color: #7b8794;
+  font-size: 0.84rem;
+}
+
+.boletos-registros .boletos-hint {
+  margin-top: -0.4rem;
+}
+
+.boletos-table-wrap--plain {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.boletos-table--registros th {
+  background: transparent;
+  color: #8b97a3;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.boletos-table--registros td {
+  color: #243140;
+  font-size: 0.92rem;
+}
+
+.boletos-desc {
+  font-weight: 700;
+}
+
+.boletos-valor {
+  color: #1f9d55 !important;
+  font-weight: 700;
+}
+
+.boletos-pill {
+  display: inline-block;
+  background: #e8f3ff;
+  color: #3b82c4;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.boletos-pill--vista {
+  background: #f3f0ff;
+  color: #6d5bd0;
+}
+
+.boletos-table--registros .boletos-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.boletos-table--registros .boletos-btn-edit,
+.boletos-table--registros .boletos-btn-del {
+  border-radius: 6px;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.boletos-table--registros .boletos-btn-edit {
+  color: #5b6b7c;
+  background: #fff;
+  border: 1px solid #d5dee6;
+}
+
+.boletos-table--registros .boletos-btn-del {
+  color: #e11d48;
+  background: #fff1f2;
+  border: 0;
+}
+
+@media (max-width: 960px) {
+  .boletos-lancamento {
+    grid-template-columns: 1fr;
+  }
+
+  .boletos-registros-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .boletos-registros-head p {
+    text-align: left;
+  }
 }

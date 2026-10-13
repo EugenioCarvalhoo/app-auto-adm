@@ -242,6 +242,10 @@ async function assertBoletosAcessoRestaurante(req, res, restauranteId) {
   return true;
 }
 
+function hojeBrasil() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+}
+
 function dateToIso(value) {
   if (!value) return null;
   if (typeof value === 'string') {
@@ -2071,7 +2075,10 @@ app.post('/api/boletos', authenticateToken, requireModuloBoletos, async (req, re
       return res.status(400).json({ error: 'Valor inválido' });
     }
     const tipo = normalizarTipo(body.tipo);
-    const dtRecebimento = body.dt_recebimento ? parseDateOnly(String(body.dt_recebimento).slice(0, 10)) : null;
+    let dtRecebimento = body.dt_recebimento ? parseDateOnly(String(body.dt_recebimento).slice(0, 10)) : null;
+    if (tipo === 'Sem Boleto' && !dtRecebimento) {
+      dtRecebimento = hojeBrasil();
+    }
     if (!dtRecebimento) {
       return res.status(400).json({ error: 'Data de recebimento é obrigatória' });
     }
@@ -2081,8 +2088,6 @@ app.post('/api/boletos', authenticateToken, requireModuloBoletos, async (req, re
       if (!dtVencimento) {
         return res.status(400).json({ error: 'Data de vencimento é obrigatória para boleto' });
       }
-    } else if (body.dt_vencimento) {
-      dtVencimento = parseDateOnly(String(body.dt_vencimento).slice(0, 10));
     }
 
     const result = await pool.query(
@@ -2123,14 +2128,19 @@ app.put('/api/boletos/:id', authenticateToken, requireModuloBoletos, async (req,
       return res.status(400).json({ error: 'Valor inválido' });
     }
     const tipo = body.tipo !== undefined ? normalizarTipo(body.tipo) : normalizarTipo(atual.tipo);
-    const dtRecebimento = body.dt_recebimento !== undefined
+    let dtRecebimento = body.dt_recebimento !== undefined
       ? parseDateOnly(String(body.dt_recebimento || '').slice(0, 10))
       : dateToIso(atual.dt_recebimento);
+    if (tipo === 'Sem Boleto' && !dtRecebimento) {
+      dtRecebimento = hojeBrasil();
+    }
     if (!dtRecebimento) {
       return res.status(400).json({ error: 'Data de recebimento é obrigatória' });
     }
     let dtVencimento = dateToIso(atual.dt_vencimento);
-    if (body.dt_vencimento !== undefined) {
+    if (tipo === 'Sem Boleto') {
+      dtVencimento = null;
+    } else if (body.dt_vencimento !== undefined) {
       dtVencimento = body.dt_vencimento
         ? parseDateOnly(String(body.dt_vencimento).slice(0, 10))
         : null;
