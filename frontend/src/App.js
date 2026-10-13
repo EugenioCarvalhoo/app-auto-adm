@@ -77,21 +77,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) return undefined;
-    const atualizarPermissoes = async () => {
-      try {
-        const { data } = await axios.get(`${API_URL}/verify`);
-        setUser(data.user);
-        localStorage.setItem('user', JSON.stringify(data.user));
-      } catch {
-        /* token inválido tratado pelo interceptor */
-      }
-    };
-    window.addEventListener('focus', atualizarPermissoes);
-    return () => window.removeEventListener('focus', atualizarPermissoes);
-  }, [isAuthenticated]);
-
-  useEffect(() => {
     if (isAuthenticated) {
       carregarRestaurantes();
     }

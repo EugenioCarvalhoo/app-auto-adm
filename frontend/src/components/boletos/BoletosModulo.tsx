@@ -60,6 +60,14 @@ const VAZIO = {
   tipo: 'Boleto' as TipoDado
 };
 
+function dentroDoIntervalo(data: string | null, de: string, ate: string) {
+  if (!de && !ate) return true;
+  if (!data) return false;
+  if (de && data < de) return false;
+  if (ate && data > ate) return false;
+  return true;
+}
+
 function mensagemErro(error: unknown, fallback: string): string {
   const ax = error as { response?: { data?: { error?: string } } };
   return ax.response?.data?.error || fallback;
@@ -78,7 +86,10 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
   const [metaData, setMetaData] = useState('');
   const [metaValor, setMetaValor] = useState('');
   const [filtroSemana, setFiltroSemana] = useState('');
-  const [filtroRecebimento, setFiltroRecebimento] = useState('');
+  const [filtroRecebimentoDe, setFiltroRecebimentoDe] = useState('');
+  const [filtroRecebimentoAte, setFiltroRecebimentoAte] = useState('');
+  const [filtroPagamentoDe, setFiltroPagamentoDe] = useState('');
+  const [filtroPagamentoAte, setFiltroPagamentoAte] = useState('');
   const formRef = useRef<HTMLFormElement>(null);
   const ultimoCampo = useRef<HTMLElement | null>(null);
 
@@ -161,13 +172,26 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
     return opcoes.sort((a, b) => b[0].localeCompare(a[0]));
   }, [boletos]);
 
+  const temFiltroData =
+    Boolean(filtroRecebimentoDe || filtroRecebimentoAte || filtroPagamentoDe || filtroPagamentoAte);
+  const temFiltro = Boolean(filtroSemana) || temFiltroData;
+
   const boletosFiltrados = useMemo(() => {
     return boletos.filter((item) => {
       if (filtroSemana && item.semana_inicio !== filtroSemana) return false;
-      if (filtroRecebimento && item.dt_recebimento !== filtroRecebimento) return false;
+      if (!dentroDoIntervalo(item.dt_recebimento, filtroRecebimentoDe, filtroRecebimentoAte)) return false;
+      const pagamento = item.dt_vencimento_efetivo || item.dt_vencimento;
+      if (!dentroDoIntervalo(pagamento, filtroPagamentoDe, filtroPagamentoAte)) return false;
       return true;
     });
-  }, [boletos, filtroRecebimento, filtroSemana]);
+  }, [
+    boletos,
+    filtroPagamentoAte,
+    filtroPagamentoDe,
+    filtroRecebimentoAte,
+    filtroRecebimentoDe,
+    filtroSemana
+  ]);
 
   const boletosSemanaAtual = useMemo(() => {
     if (!semanaAtual) return [];
@@ -198,7 +222,7 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
       onMessage?.('Informe a descrição.');
       return;
     }
-    if (form.tipo === 'Boleto' && !recebimento) {
+    if (!recebimento) {
       onMessage?.('Informe a data de recebimento.');
       return;
     }
@@ -214,7 +238,7 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
     onMessage?.(null);
     const payload = {
       restaurante_id: restauranteId,
-      dt_recebimento: form.tipo === 'Sem Boleto' && !editandoId ? hojeIso() : recebimento,
+      dt_recebimento: recebimento,
       dt_vencimento: form.tipo === 'Boleto' ? form.dt_vencimento : null,
       descricao: form.descricao.trim(),
       valor,
@@ -338,32 +362,30 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
             <option value="Sem Boleto">Sem Boleto</option>
           </select>
         </label>
+        <label>
+          Dt. recebimento <span className="boletos-req">*</span>
+          <input
+            data-boleto-campo="recebimento"
+            type="date"
+            value={form.dt_recebimento}
+            onChange={(e) => setForm({ ...form, dt_recebimento: e.target.value })}
+            required
+          />
+        </label>
         {form.tipo === 'Boleto' ? (
-          <>
-            <label>
-              Dt. recebimento <span className="boletos-req">*</span>
-              <input
-                data-boleto-campo="recebimento"
-                type="date"
-                value={form.dt_recebimento}
-                onChange={(e) => setForm({ ...form, dt_recebimento: e.target.value })}
-                required
-              />
-            </label>
-            <label>
-              Dt. vencimento <span className="boletos-req">*</span>
-              <input
-                data-boleto-campo="vencimento"
-                type="date"
-                value={form.dt_vencimento}
-                onChange={(e) => setForm({ ...form, dt_vencimento: e.target.value })}
-                required
-              />
-            </label>
-          </>
+          <label>
+            Dt. vencimento <span className="boletos-req">*</span>
+            <input
+              data-boleto-campo="vencimento"
+              type="date"
+              value={form.dt_vencimento}
+              onChange={(e) => setForm({ ...form, dt_vencimento: e.target.value })}
+              required
+            />
+          </label>
         ) : (
           <p className="boletos-avista">
-            À vista: a data de recebimento fica {formatarDataBr(previsao.recebimento)} automaticamente.
+            À vista: a data entra com hoje e pode ser alterada. O vencimento usado é essa data mais 7 dias.
           </p>
         )}
         <label>
@@ -555,11 +577,11 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
             <div className="boletos-registros-head">
               <h3>Registros Cadastrados</h3>
               <p>
-                {filtroSemana || filtroRecebimento ? 'Total filtrado' : 'Total da semana'}:{' '}
+                {temFiltro ? 'Total filtrado' : 'Total da semana'}:{' '}
                 <strong>
                   {formatarMoeda(
                     somaValores(
-                      filtroSemana || filtroRecebimento
+                      temFiltro
                         ? boletosFiltrados
                         : boletos.filter((item) => item.semana_inicio === semanaAtual?.inicio)
                     )
@@ -579,17 +601,58 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
                   ))}
                 </select>
               </label>
-              <label>
-                Data de recebimento
-                <input type="date" value={filtroRecebimento} onChange={(e) => setFiltroRecebimento(e.target.value)} />
-              </label>
-              {(filtroSemana || filtroRecebimento) && (
+              <div className="boletos-filtro-range">
+                <span>Data de recebimento</span>
+                <div className="boletos-filtro-range-campos">
+                  <label>
+                    De
+                    <input
+                      type="date"
+                      value={filtroRecebimentoDe}
+                      onChange={(e) => setFiltroRecebimentoDe(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Até
+                    <input
+                      type="date"
+                      value={filtroRecebimentoAte}
+                      onChange={(e) => setFiltroRecebimentoAte(e.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
+              <div className="boletos-filtro-range">
+                <span>Data de pagamento</span>
+                <div className="boletos-filtro-range-campos">
+                  <label>
+                    De
+                    <input
+                      type="date"
+                      value={filtroPagamentoDe}
+                      onChange={(e) => setFiltroPagamentoDe(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Até
+                    <input
+                      type="date"
+                      value={filtroPagamentoAte}
+                      onChange={(e) => setFiltroPagamentoAte(e.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
+              {temFiltro && (
                 <button
                   type="button"
                   className="boletos-btn-ghost"
                   onClick={() => {
                     setFiltroSemana('');
-                    setFiltroRecebimento('');
+                    setFiltroRecebimentoDe('');
+                    setFiltroRecebimentoAte('');
+                    setFiltroPagamentoDe('');
+                    setFiltroPagamentoAte('');
                   }}
                 >
                   Limpar filtros
