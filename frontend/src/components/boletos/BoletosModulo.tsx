@@ -1,5 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { API_URL } from '../../config';
 import {
@@ -66,21 +65,6 @@ function mensagemErro(error: unknown, fallback: string): string {
   return ax.response?.data?.error || fallback;
 }
 
-function focarProximoCampo() {
-  const campos = Array.from(document.querySelectorAll<HTMLElement>('[data-boleto-campo]')).filter(
-    (el) => !el.hasAttribute('disabled') && el.getClientRects().length > 0
-  );
-  if (campos.length === 0) return;
-  const ativo = document.activeElement as HTMLElement | null;
-  const indice = campos.findIndex((el) => el === ativo);
-  const proximo = indice < 0 ? campos[0] : campos[indice + 1];
-  if (proximo) {
-    proximo.focus();
-    return;
-  }
-  document.querySelector<HTMLElement>('[data-boleto-salvar]')?.focus();
-}
-
 const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMessage }) => {
   const [aba, setAba] = useState<Aba>('cadastro');
   const [boletos, setBoletos] = useState<Boleto[]>([]);
@@ -95,6 +79,36 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
   const [metaValor, setMetaValor] = useState('');
   const [filtroSemana, setFiltroSemana] = useState('');
   const [filtroRecebimento, setFiltroRecebimento] = useState('');
+  const formRef = useRef<HTMLFormElement>(null);
+  const ultimoCampo = useRef<HTMLElement | null>(null);
+
+  const guardarCampo = (event: React.FocusEvent<HTMLFormElement>) => {
+    const alvo = event.target;
+    if (alvo instanceof HTMLElement && alvo.matches('[data-boleto-campo]')) {
+      ultimoCampo.current = alvo;
+    }
+  };
+
+  const focarProximoCampo = () => {
+    const raiz = formRef.current;
+    if (!raiz) return;
+    const campos = Array.from(raiz.querySelectorAll<HTMLElement>('[data-boleto-campo]')).filter(
+      (el) => !el.hasAttribute('disabled') && el.getClientRects().length > 0
+    );
+    if (campos.length === 0) return;
+    const focado = document.activeElement;
+    const ativo =
+      focado instanceof HTMLElement && campos.includes(focado) ? focado : ultimoCampo.current;
+    const indice = ativo ? campos.indexOf(ativo) : -1;
+    const proximo = indice < 0 ? campos[0] : campos[indice + 1];
+    if (proximo) {
+      ultimoCampo.current = proximo;
+      proximo.focus();
+      proximo.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      return;
+    }
+    raiz.querySelector<HTMLElement>('[data-boleto-salvar]')?.focus();
+  };
 
   const semanaAtual = useMemo(() => intervaloSemana(hojeIso()), []);
 
@@ -294,10 +308,29 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
   const formulario = (
     <aside className="boletos-cadastro-card">
       <div className="boletos-cadastro-head">
-        <h3>Cadastro de Item</h3>
-        <span className="boletos-modo">{editandoId ? 'Modo: Editar' : 'Modo: Adicionar'}</span>
+        <div className="boletos-cadastro-titulo">
+          <h3>Cadastro de Item</h3>
+          <span className="boletos-modo">{editandoId ? 'Modo: Editar' : 'Modo: Adicionar'}</span>
+        </div>
+        <button
+          type="button"
+          className="boletos-next"
+          aria-label="Próximo campo"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={focarProximoCampo}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 5v12" />
+            <path d="M6 13l6 6 6-6" />
+          </svg>
+        </button>
       </div>
-      <form className="boletos-form boletos-form--lancamento" onSubmit={salvarLancamento}>
+      <form
+        ref={formRef}
+        className="boletos-form boletos-form--lancamento"
+        onSubmit={salvarLancamento}
+        onFocus={guardarCampo}
+      >
         <label>
           Tipo de dado <span className="boletos-req">*</span>
           <select data-boleto-campo="tipo" value={form.tipo} onChange={(e) => mudarTipo(e.target.value as TipoDado)}>
@@ -434,8 +467,6 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
         </table>
       </div>
     );
-
-  const mostrarNext = simples || aba === 'cadastro';
 
   return (
     <section className="boletos">
@@ -630,14 +661,6 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
         </>
       )}
 
-      {mostrarNext &&
-        !loading &&
-        createPortal(
-          <button type="button" className="boletos-next" onClick={focarProximoCampo} aria-label="Next">
-            Next
-          </button>,
-          document.body
-        )}
     </section>
   );
 };
