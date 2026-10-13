@@ -140,7 +140,11 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
     boletos.forEach((item) => {
       if (item.semana_inicio && item.semana_fim) mapa.set(item.semana_inicio, item.semana_fim);
     });
-    return [...mapa.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+    const opcoes: [string, string][] = [];
+    mapa.forEach((fim, inicio) => {
+      opcoes.push([inicio, fim]);
+    });
+    return opcoes.sort((a, b) => b[0].localeCompare(a[0]));
   }, [boletos]);
 
   const boletosFiltrados = useMemo(() => {
