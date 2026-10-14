@@ -445,7 +445,7 @@ function App() {
                 }}
                 className={telaAtual === 'permissoes' ? 'nav-tab active' : 'nav-tab'}
               >
-                Permissões
+                Usuários
               </button>
             )}
             {acessoEstoque && (

@@ -2377,6 +2377,102 @@ app.get('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, async
   }
 });
 
+app.post('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const body = req.body || {};
+    const username = String(body.username || '').trim();
+    const password = String(body.password || '');
+    const nome = String(body.nome || '').trim();
+    if (!username) {
+      return res.status(400).json({ error: 'Login é obrigatório' });
+    }
+    if (password.length < 4) {
+      return res.status(400).json({ error: 'Senha é obrigatória (mín. 4 caracteres).' });
+    }
+    if (!nome) {
+      return res.status(400).json({ error: 'Nome é obrigatório' });
+    }
+
+    const moduloFinanceiro = body.modulo_financeiro === true;
+    const moduloEstoque = body.modulo_estoque === true;
+    const moduloEstoqueSimplificado = body.modulo_estoque_simplificado === true;
+    const moduloBoletos = body.modulo_boletos === true;
+    if (!moduloFinanceiro && !moduloEstoque && !moduloEstoqueSimplificado && !moduloBoletos) {
+      return res.status(400).json({ error: 'Marque ao menos um módulo para o usuário.' });
+    }
+
+    const restrito = !moduloFinanceiro && (moduloEstoque || moduloEstoqueSimplificado || moduloBoletos);
+    const restauranteIds = Array.isArray(body.restaurante_ids)
+      ? body.restaurante_ids.map((x) => parseInt(x, 10)).filter((x) => !Number.isNaN(x))
+      : [];
+    if (restrito && restauranteIds.length === 0) {
+      return res.status(400).json({
+        error: 'Usuário sem módulo financeiro precisa de ao menos um restaurante liberado.'
+      });
+    }
+
+    const dup = await client.query('SELECT id FROM usuarios WHERE username = $1', [username]);
+    if (dup.rows.length > 0) {
+      return res.status(409).json({ error: 'Já existe usuário com este login.' });
+    }
+
+    const somenteEstoqueLegacy = !moduloFinanceiro && (moduloEstoque || moduloEstoqueSimplificado);
+    const hash = await bcrypt.hash(password, 10);
+    await client.query('BEGIN');
+    const ins = await client.query(
+      `INSERT INTO usuarios (
+         username, password, nome, is_admin, somente_estoque,
+         modulo_financeiro, modulo_estoque, modulo_estoque_simplificado, modulo_boletos
+       ) VALUES ($1, $2, $3, false, $4, $5, $6, $7, $8)
+       RETURNING id, username, nome`,
+      [
+        username,
+        hash,
+        nome,
+        somenteEstoqueLegacy,
+        moduloFinanceiro,
+        moduloEstoque,
+        moduloEstoqueSimplificado,
+        moduloBoletos
+      ]
+    );
+    const newUser = ins.rows[0];
+    let ids = [];
+    if (restrito) {
+      ids = await sincronizarRestaurantesUsuario(client, newUser.id, restauranteIds);
+      if (ids.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Nenhum dos restaurantes informados é válido ou está ativo.' });
+      }
+    }
+    await client.query('COMMIT');
+    res.status(201).json({
+      id: newUser.id,
+      username: newUser.username,
+      nome: newUser.nome,
+      is_admin: false,
+      modulo_financeiro: moduloFinanceiro,
+      modulo_estoque: moduloEstoque,
+      modulo_estoque_simplificado: moduloEstoqueSimplificado,
+      modulo_boletos: moduloBoletos,
+      restaurante_ids: ids
+    });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (error.code === '42703') {
+      return res.status(503).json({ error: 'Migração de permissões pendente (013 ou 014).' });
+    }
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Já existe usuário com este login.' });
+    }
+    console.error('Erro ao criar usuário:', error);
+    res.status(500).json({ error: 'Erro ao criar usuário' });
+  } finally {
+    client.release();
+  }
+});
+
 app.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {

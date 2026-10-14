@@ -26,11 +26,24 @@ interface Props {
   onError?: (msg: string | null) => void;
 }
 
+const NOVO_VAZIO = {
+  username: '',
+  password: '',
+  nome: '',
+  modulo_financeiro: false,
+  modulo_estoque: false,
+  modulo_estoque_simplificado: false,
+  modulo_boletos: false,
+  restaurante_ids: [] as number[]
+};
+
 const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
   const [lista, setLista] = useState<UsuarioPermissaoRow[]>([]);
   const [restaurantes, setRestaurantes] = useState<Restaurante[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
+  const [criando, setCriando] = useState(false);
+  const [novo, setNovo] = useState(NOVO_VAZIO);
   const [banner, setBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   const carregar = useCallback(async () => {
@@ -110,12 +123,68 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
     !u.modulo_financeiro &&
     (u.modulo_estoque || u.modulo_estoque_simplificado || u.modulo_boletos);
 
+  const novoPrecisaRestaurante =
+    !novo.modulo_financeiro &&
+    (novo.modulo_estoque || novo.modulo_estoque_simplificado || novo.modulo_boletos);
+
+  const alternarModuloNovo = (campo: ModuloKey) => {
+    setNovo((atual) => ({ ...atual, [campo]: !atual[campo] }));
+  };
+
+  const alternarRestauranteNovo = (restId: number) => {
+    setNovo((atual) => ({
+      ...atual,
+      restaurante_ids: atual.restaurante_ids.includes(restId)
+        ? atual.restaurante_ids.filter((id) => id !== restId)
+        : [...atual.restaurante_ids, restId]
+    }));
+  };
+
+  const criarUsuario = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (
+      !novo.modulo_financeiro &&
+      !novo.modulo_estoque &&
+      !novo.modulo_estoque_simplificado &&
+      !novo.modulo_boletos
+    ) {
+      setBanner({ type: 'err', text: 'Marque ao menos um módulo para o usuário.' });
+      return;
+    }
+    if (novoPrecisaRestaurante && novo.restaurante_ids.length === 0) {
+      setBanner({ type: 'err', text: 'Marque ao menos um restaurante para quem não tem o financeiro.' });
+      return;
+    }
+    setCriando(true);
+    setBanner(null);
+    try {
+      await axios.post(`${API_URL}/admin/usuarios-permissoes`, {
+        username: novo.username.trim(),
+        password: novo.password,
+        nome: novo.nome.trim(),
+        modulo_financeiro: novo.modulo_financeiro,
+        modulo_estoque: novo.modulo_estoque,
+        modulo_estoque_simplificado: novo.modulo_estoque_simplificado,
+        modulo_boletos: novo.modulo_boletos,
+        restaurante_ids: novoPrecisaRestaurante ? novo.restaurante_ids : []
+      });
+      setNovo(NOVO_VAZIO);
+      await carregar();
+      setBanner({ type: 'ok', text: 'Usuário criado. Ele já pode entrar com o login e a senha definidos.' });
+    } catch (e: unknown) {
+      const ax = e as { response?: { data?: { error?: string } } };
+      setBanner({ type: 'err', text: ax.response?.data?.error || 'Erro ao criar usuário.' });
+    } finally {
+      setCriando(false);
+    }
+  };
+
   return (
     <div className="admin-perm">
-      <h1 className="admin-perm-title">Permissões de usuários</h1>
+      <h1 className="admin-perm-title">Usuários e permissões</h1>
       <p className="admin-perm-hint">
-        Marque os módulos que cada usuário pode acessar. Quem não tem o financeiro e usa estoque ou boletos
-        precisa de restaurantes liberados na linha expandida abaixo.
+        Cadastre o login e marque os módulos, inclusive boletos e notas. Quem não tem o financeiro e usa estoque ou
+        boletos precisa de restaurantes liberados.
       </p>
 
       {banner && (
@@ -126,6 +195,111 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
           {banner.text}
         </div>
       )}
+
+      <form className="admin-perm-novo" onSubmit={criarUsuario}>
+        <h2>Novo usuário</h2>
+        <div className="admin-perm-novo-grid">
+          <label>
+            Login
+            <input
+              value={novo.username}
+              onChange={(e) => setNovo({ ...novo, username: e.target.value })}
+              autoComplete="off"
+              required
+            />
+          </label>
+          <label>
+            Senha
+            <input
+              type="password"
+              value={novo.password}
+              onChange={(e) => setNovo({ ...novo, password: e.target.value })}
+              autoComplete="new-password"
+              minLength={4}
+              required
+            />
+          </label>
+          <label>
+            Nome
+            <input
+              value={novo.nome}
+              onChange={(e) => setNovo({ ...novo, nome: e.target.value })}
+              required
+            />
+          </label>
+        </div>
+        <fieldset className="admin-perm-rest-fieldset">
+          <legend className="admin-perm-rest-legend">Módulos</legend>
+          <ul className="admin-perm-rest-list">
+            <li>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={novo.modulo_financeiro}
+                  onChange={() => alternarModuloNovo('modulo_financeiro')}
+                />
+                <span>Financeiro</span>
+              </label>
+            </li>
+            <li>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={novo.modulo_estoque}
+                  onChange={() => alternarModuloNovo('modulo_estoque')}
+                />
+                <span>Estoque</span>
+              </label>
+            </li>
+            <li>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={novo.modulo_estoque_simplificado}
+                  onChange={() => alternarModuloNovo('modulo_estoque_simplificado')}
+                />
+                <span>Estoque simplificado</span>
+              </label>
+            </li>
+            <li>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={novo.modulo_boletos}
+                  onChange={() => alternarModuloNovo('modulo_boletos')}
+                />
+                <span>Boletos e notas</span>
+              </label>
+            </li>
+          </ul>
+        </fieldset>
+        {novoPrecisaRestaurante && (
+          <fieldset className="admin-perm-rest-fieldset">
+            <legend className="admin-perm-rest-legend">Restaurantes liberados</legend>
+            {restaurantes.length === 0 ? (
+              <span className="admin-perm-user-nome">Cadastre restaurantes primeiro.</span>
+            ) : (
+              <ul className="admin-perm-rest-list">
+                {restaurantes.map((r) => (
+                  <li key={r.id}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={novo.restaurante_ids.includes(r.id)}
+                        onChange={() => alternarRestauranteNovo(r.id)}
+                      />
+                      <span>{r.nome}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </fieldset>
+        )}
+        <button type="submit" className="admin-perm-criar" disabled={criando || loading}>
+          {criando ? 'Salvando…' : 'Cadastrar usuário'}
+        </button>
+      </form>
 
       <div className="admin-perm-grid-wrap">
         {loading ? (
