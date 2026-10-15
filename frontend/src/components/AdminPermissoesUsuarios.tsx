@@ -179,6 +179,23 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
     }
   };
 
+  const removerUsuario = async (usuario: UsuarioPermissaoRow) => {
+    if (usuario.is_admin) return;
+    if (!window.confirm(`Remover o usuário ${usuario.username}? Esta ação não pode ser desfeita.`)) return;
+    setSavingId(usuario.id);
+    setBanner(null);
+    try {
+      await axios.delete(`${API_URL}/admin/usuarios-permissoes/${usuario.id}`);
+      await carregar();
+      setBanner({ type: 'ok', text: `Usuário ${usuario.username} removido.` });
+    } catch (e: unknown) {
+      const ax = e as { response?: { data?: { error?: string } } };
+      setBanner({ type: 'err', text: ax.response?.data?.error || 'Erro ao remover usuário.' });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   return (
     <div className="admin-perm">
       <h1 className="admin-perm-title">Usuários e permissões</h1>
@@ -315,6 +332,7 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
                 <th className="admin-perm-th-check">Estoque</th>
                 <th className="admin-perm-th-check">Estoque simplificado</th>
                 <th className="admin-perm-th-check">Boletos e notas</th>
+                <th className="admin-perm-th-acao">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -369,10 +387,22 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
                         />
                       </label>
                     </td>
+                    <td className="admin-perm-td-acao">
+                      {!u.is_admin && (
+                        <button
+                          type="button"
+                          className="admin-perm-remover"
+                          disabled={savingId === u.id}
+                          onClick={() => removerUsuario(u)}
+                        >
+                          Remover
+                        </button>
+                      )}
+                    </td>
                   </tr>
                   {precisaRestaurantes(u) && (
                     <tr className="admin-perm-rest-row">
-                      <td colSpan={5}>
+                      <td colSpan={6}>
                         <fieldset className="admin-perm-rest-fieldset">
                           <legend className="admin-perm-rest-legend">Restaurantes liberados</legend>
                           {restaurantes.length === 0 ? (

@@ -153,6 +153,28 @@
   color: #64748b;
 }
 
+.admin-perm-th-acao,
+.admin-perm-td-acao {
+  text-align: right;
+  width: 96px;
+}
+
+.admin-perm-remover {
+  background: #fff1f2;
+  color: #e11d48;
+  border: 0;
+  border-radius: 6px;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-perm-remover:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .admin-perm-novo {
   background: #fff;
   border: 1px solid #e2e8f0;

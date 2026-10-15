@@ -2559,6 +2559,35 @@ app.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin, a
   }
 });
 
+app.delete('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (Number.isNaN(userId)) {
+      return res.status(400).json({ error: 'id inválido' });
+    }
+    if (userId === req.user.id) {
+      return res.status(400).json({ error: 'Não é possível remover o próprio usuário.' });
+    }
+    const cur = await pool.query('SELECT id, is_admin FROM usuarios WHERE id = $1', [userId]);
+    if (cur.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+    if (cur.rows[0].is_admin) {
+      return res.status(400).json({ error: 'Não é possível remover um administrador.' });
+    }
+    await pool.query('DELETE FROM usuarios WHERE id = $1', [userId]);
+    res.json({ message: 'Usuário removido', id: userId });
+  } catch (error) {
+    if (error.code === '23503') {
+      return res.status(409).json({
+        error: 'Este usuário ainda está ligado a outros registros e não pode ser removido.'
+      });
+    }
+    console.error('Erro ao remover usuário:', error);
+    res.status(500).json({ error: 'Erro ao remover usuário' });
+  }
+});
+
 // ========== Admin: usuários de estoque + vínculos com restaurantes (legado) ==========
 
 app.get('/api/admin/usuarios-estoque', authenticateToken, requireAdmin, async (req, res) => {
