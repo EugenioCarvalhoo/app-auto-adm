@@ -2307,8 +2307,8 @@ app.delete('/api/boletos/metas/:id', authenticateToken, requireModuloBoletos, as
 
 // ========== Admin: permissões por módulo ==========
 
-async function listarRestauranteIdsUsuario(userId) {
-  const assoc = await pool.query(
+async function listarRestauranteIdsUsuario(userId, db = pool) {
+  const assoc = await db.query(
     'SELECT restaurante_id FROM usuario_restaurante_estoque WHERE usuario_id = $1 ORDER BY restaurante_id',
     [userId]
   );
@@ -2329,7 +2329,7 @@ async function sincronizarRestaurantesUsuario(client, userId, restauranteIds) {
       [userId, rid]
     );
   }
-  return listarRestauranteIdsUsuario(userId);
+  return listarRestauranteIdsUsuario(userId, client);
 }
 
 app.get('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, async (req, res) => {
