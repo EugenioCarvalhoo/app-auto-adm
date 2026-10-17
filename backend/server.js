@@ -2170,12 +2170,25 @@ app.delete('/api/boletos/:id', authenticateToken, requireModuloBoletos, async (r
     if (Number.isNaN(id)) {
       return res.status(400).json({ error: 'id inválido' });
     }
-    const existing = await pool.query('SELECT restaurante_id FROM boletos_notas WHERE id = $1', [id]);
+    const existing = await pool.query(
+      'SELECT restaurante_id, created_at FROM boletos_notas WHERE id = $1',
+      [id]
+    );
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Lançamento não encontrado' });
     }
     const pode = await assertBoletosAcessoRestaurante(req, res, existing.rows[0].restaurante_id);
     if (!pode) return;
+    const flags = await loadUserFlags(req.user.id);
+    if (!flags || !flags.is_admin) {
+      const criado = new Date(existing.rows[0].created_at).getTime();
+      const passouUmDia = !Number.isFinite(criado) || Date.now() - criado > 24 * 60 * 60 * 1000;
+      if (passouUmDia) {
+        return res.status(403).json({
+          error: 'Só o administrador pode excluir um lançamento com mais de 1 dia.'
+        });
+      }
+    }
     await pool.query('DELETE FROM boletos_notas WHERE id = $1', [id]);
     res.json({ message: 'Lançamento removido', id });
   } catch (error) {

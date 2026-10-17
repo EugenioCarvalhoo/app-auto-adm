@@ -26,6 +26,8 @@ interface Boleto {
   dt_vencimento_efetivo: string | null;
   semana_inicio: string | null;
   semana_fim: string | null;
+  semana_chave: string | null;
+  created_at?: string | null;
 }
 
 interface SemanaResumo {
@@ -48,6 +50,7 @@ interface Meta {
 
 interface Props {
   restauranteId: number;
+  restauranteNome?: string;
   simples?: boolean;
   onMessage?: (msg: string | null) => void;
 }
@@ -60,6 +63,13 @@ const VAZIO = {
   tipo: 'Boleto' as TipoDado
 };
 
+function lancamentoDentroDeUmDia(createdAt: string | null | undefined): boolean {
+  if (!createdAt) return false;
+  const criado = new Date(createdAt).getTime();
+  if (!Number.isFinite(criado)) return false;
+  return Date.now() - criado <= 24 * 60 * 60 * 1000;
+}
+
 function dentroDoIntervalo(data: string | null, de: string, ate: string) {
   if (!de && !ate) return true;
   if (!data) return false;
@@ -68,16 +78,24 @@ function dentroDoIntervalo(data: string | null, de: string, ate: string) {
   return true;
 }
 
+function progressoMeta(gasto: number, meta: number | null): number | null {
+  if (meta == null || meta <= 0) return null;
+  return (gasto / meta) * 100;
+}
+
+function textoPercentual(valor: number, casas = 1): string {
+  return `${valor.toFixed(casas).replace('.', ',')}%`;
+}
+
 function mensagemErro(error: unknown, fallback: string): string {
   const ax = error as { response?: { data?: { error?: string } } };
   return ax.response?.data?.error || fallback;
 }
 
-const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMessage }) => {
+const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simples = false, onMessage }) => {
   const [aba, setAba] = useState<Aba>('cadastro');
   const [boletos, setBoletos] = useState<Boleto[]>([]);
   const [semanas, setSemanas] = useState<SemanaResumo[]>([]);
-  const [totalGeral, setTotalGeral] = useState(0);
   const [metas, setMetas] = useState<Meta[]>([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -90,7 +108,11 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
   const [filtroRecebimentoAte, setFiltroRecebimentoAte] = useState('');
   const [filtroPagamentoDe, setFiltroPagamentoDe] = useState('');
   const [filtroPagamentoAte, setFiltroPagamentoAte] = useState('');
+  const [filtroTabela, setFiltroTabela] = useState('ALL');
+  const [editandoMetaChave, setEditandoMetaChave] = useState<string | null>(null);
+  const [metaCardValor, setMetaCardValor] = useState('');
   const formRef = useRef<HTMLFormElement>(null);
+  const cardRef = useRef<HTMLElement>(null);
   const ultimoCampo = useRef<HTMLElement | null>(null);
 
   const guardarCampo = (event: React.FocusEvent<HTMLFormElement>) => {
@@ -146,7 +168,6 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
         ]);
         setBoletos(lista.data || []);
         setSemanas(resumo.data?.semanas || []);
-        setTotalGeral(Number(resumo.data?.total_geral || 0));
         setMetas(listaMetas.data || []);
       }
     } catch (error) {
@@ -165,12 +186,13 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
     boletos.forEach((item) => {
       if (item.semana_inicio && item.semana_fim) mapa.set(item.semana_inicio, item.semana_fim);
     });
+    if (semanaAtual) mapa.set(semanaAtual.inicio, semanaAtual.fim);
     const opcoes: [string, string][] = [];
     mapa.forEach((fim, inicio) => {
       opcoes.push([inicio, fim]);
     });
     return opcoes.sort((a, b) => b[0].localeCompare(a[0]));
-  }, [boletos]);
+  }, [boletos, semanaAtual]);
 
   const temFiltroData =
     Boolean(filtroRecebimentoDe || filtroRecebimentoAte || filtroPagamentoDe || filtroPagamentoAte);
@@ -193,13 +215,30 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
     filtroSemana
   ]);
 
-  const boletosSemanaAtual = useMemo(() => {
-    if (!semanaAtual) return [];
-    return boletos.filter((item) => {
-      const recebimento = item.dt_recebimento || '';
-      return recebimento >= semanaAtual.inicio && recebimento <= semanaAtual.fim;
-    });
-  }, [boletos, semanaAtual]);
+  const macro = useMemo(() => {
+    const total = boletos.reduce((acc, item) => acc + Number(item.valor || 0), 0);
+    const deBoleto = boletos.filter((item) => item.tipo === 'Boleto');
+    const semBoleto = boletos.filter((item) => item.tipo !== 'Boleto');
+    const soma = (itens: Boleto[]) => itens.reduce((acc, item) => acc + Number(item.valor || 0), 0);
+    const totalBoletos = soma(deBoleto);
+    const totalSemBoleto = soma(semBoleto);
+    return {
+      total,
+      quantidade: boletos.length,
+      totalBoletos,
+      quantidadeBoletos: deBoleto.length,
+      totalSemBoleto,
+      quantidadeSemBoleto: semBoleto.length,
+      ticket: boletos.length ? total / boletos.length : 0,
+      parteBoletos: total ? (totalBoletos / total) * 100 : 0,
+      parteSemBoleto: total ? (totalSemBoleto / total) * 100 : 0
+    };
+  }, [boletos]);
+
+  const lancamentosTabela = useMemo(() => {
+    if (filtroTabela === 'ALL') return boletos;
+    return boletos.filter((item) => item.semana_chave === filtroTabela);
+  }, [boletos, filtroTabela]);
 
   const mudarTipo = (tipo: TipoDado) => {
     if (tipo === 'Sem Boleto') {
@@ -270,6 +309,9 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
       valor: String(item.valor).replace('.', ','),
       tipo: item.tipo
     });
+    window.setTimeout(() => {
+      cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 0);
   };
 
   const excluir = async (id: number) => {
@@ -316,6 +358,30 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
     }
   };
 
+  const salvarMetaCard = async (semana: SemanaResumo) => {
+    const maximo = parseValorBr(metaCardValor);
+    if (maximo == null) {
+      onMessage?.('Informe o máximo de gasto.');
+      return;
+    }
+    setSalvando(true);
+    onMessage?.(null);
+    try {
+      await axios.post(`${API_URL}/boletos/metas`, {
+        restaurante_id: restauranteId,
+        data_referencia: semana.inicio,
+        maximo_gasto: maximo
+      });
+      setEditandoMetaChave(null);
+      setMetaCardValor('');
+      await carregar();
+    } catch (error) {
+      onMessage?.(mensagemErro(error, 'Não foi possível salvar a meta.'));
+    } finally {
+      setSalvando(false);
+    }
+  };
+
   const excluirMeta = async (id: number) => {
     if (!window.confirm('Remover esta meta?')) return;
     try {
@@ -330,7 +396,10 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
     Math.round(itens.reduce((acc, item) => acc + Number(item.valor || 0), 0) * 100) / 100;
 
   const formulario = (
-    <aside className="boletos-cadastro-card">
+    <aside
+      ref={cardRef}
+      className={editandoId ? 'boletos-cadastro-card boletos-cadastro-card--editando' : 'boletos-cadastro-card'}
+    >
       <div className="boletos-cadastro-head">
         <div className="boletos-cadastro-titulo">
           <h3>Cadastro de Item</h3>
@@ -479,9 +548,11 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
                   <button type="button" className="boletos-btn-edit" onClick={() => editar(item)}>
                     Editar
                   </button>
-                  <button type="button" className="boletos-btn-del" onClick={() => excluir(item.id)}>
-                    Excluir
-                  </button>
+                  {(!simples || lancamentoDentroDeUmDia(item.created_at)) && (
+                    <button type="button" className="boletos-btn-del" onClick={() => excluir(item.id)}>
+                      Excluir
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -524,52 +595,217 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
             <div className="boletos-registros-head">
               <h3>Registros Cadastrados</h3>
               <p>
-                Total da semana: <strong>{formatarMoeda(somaValores(boletosSemanaAtual))}</strong>
+                {filtroSemana ? 'Total da semana' : 'Total'}:{' '}
+                <strong>{formatarMoeda(somaValores(boletosFiltrados))}</strong>
               </p>
             </div>
-            <p className="boletos-hint">
-              Semana atual:{' '}
-              {semanaAtual ? `${formatarDataBr(semanaAtual.inicio)} a ${formatarDataBr(semanaAtual.fim)}` : '—'}
-            </p>
-            {tabelaRegistros(boletosSemanaAtual, 'Nenhum lançamento recebido nesta semana.')}
+            <div className="boletos-filtros">
+              <label>
+                Semana
+                <select value={filtroSemana} onChange={(e) => setFiltroSemana(e.target.value)}>
+                  <option value="">Todas</option>
+                  {opcoesSemana.map(([inicio, fim]) => (
+                    <option key={inicio} value={inicio}>
+                      {formatarDataBr(inicio)} a {formatarDataBr(fim)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {tabelaRegistros(boletosFiltrados, 'Nenhum lançamento nesta semana.')}
           </section>
         </div>
       ) : aba === 'resumo' ? (
-        <>
-          <p className="boletos-total">
-            Total lançado: <strong>{formatarMoeda(totalGeral)}</strong>
-          </p>
-          {semanas.length === 0 ? (
-            <p className="boletos-empty">Nenhum lançamento ou meta neste restaurante.</p>
-          ) : (
-            <div className="boletos-table-wrap">
-              <table className="boletos-table">
+        <div className="boletos-dash">
+          <header className="boletos-dash-head">
+            <div>
+              <h3>Dashboard financeiro e metas</h3>
+              <p>
+                {restauranteNome || `Restaurante ${restauranteId}`} · visão geral e acompanhamento semanal
+              </p>
+            </div>
+            <span>Dados do restaurante selecionado</span>
+          </header>
+
+          <div className="boletos-dash-metrics">
+            <article>
+              <span>Total geral ({macro.quantidade} lançamentos)</span>
+              <strong>{formatarMoeda(macro.total)}</strong>
+              <small>100% do volume financeiro</small>
+            </article>
+            <article className="boletos-dash-metrics--boleto">
+              <span>Total em boletos ({macro.quantidadeBoletos} un.)</span>
+              <strong>{formatarMoeda(macro.totalBoletos)}</strong>
+              <small>{textoPercentual(macro.parteBoletos, 2)} do total</small>
+            </article>
+            <article className="boletos-dash-metrics--vista">
+              <span>Total sem boleto ({macro.quantidadeSemBoleto} un.)</span>
+              <strong>{formatarMoeda(macro.totalSemBoleto)}</strong>
+              <small>{textoPercentual(macro.parteSemBoleto, 2)} do total</small>
+            </article>
+            <article className="boletos-dash-metrics--ticket">
+              <span>Ticket médio por lançamento</span>
+              <strong>{formatarMoeda(macro.ticket)}</strong>
+              <small>Média de valor por item</small>
+            </article>
+          </div>
+
+          <section className="boletos-dash-panel">
+            <div className="boletos-dash-panel-head">
+              <div>
+                <h3>Comparativo de semanas e metas</h3>
+                <p>Visão simultânea de todos os períodos de vencimento</p>
+              </div>
+              <span>Clique em Editar meta para alterar o teto da semana.</span>
+            </div>
+            {semanas.length === 0 ? (
+              <p className="boletos-dash-empty">Nenhum lançamento ou meta neste restaurante.</p>
+            ) : (
+              <div className="boletos-dash-cards">
+                {semanas.map((semana, indice) => {
+                  const progresso = progressoMeta(semana.total, semana.maximo);
+                  const estourou = progresso != null && progresso > 100;
+                  const atencao = progresso != null && progresso > 80 && progresso <= 100;
+                  return (
+                    <article key={semana.chave} className="boletos-dash-card">
+                      <div className="boletos-dash-card-head">
+                        <div>
+                          <span className="boletos-dash-chip">Semana {indice + 1}</span>
+                          <h4>
+                            {formatarDataBr(semana.inicio)} a {formatarDataBr(semana.fim)}
+                          </h4>
+                        </div>
+                        <span>{semana.quantidade} itens</span>
+                      </div>
+                      <div className="boletos-dash-linhas">
+                        <p>
+                          <span>Gasto real</span>
+                          <strong>{formatarMoeda(semana.total)}</strong>
+                        </p>
+                        <p>
+                          <span>Meta</span>
+                          <span className="boletos-dash-meta">
+                            {editandoMetaChave === semana.chave ? (
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={metaCardValor}
+                                onChange={(e) => setMetaCardValor(e.target.value)}
+                                placeholder="0,00"
+                              />
+                            ) : (
+                              <strong>
+                                {semana.maximo == null ? '—' : formatarMoeda(semana.maximo)}
+                              </strong>
+                            )}
+                            <button
+                              type="button"
+                              disabled={salvando}
+                              onClick={() => {
+                                if (editandoMetaChave === semana.chave) {
+                                  void salvarMetaCard(semana);
+                                  return;
+                                }
+                                setEditandoMetaChave(semana.chave);
+                                setMetaCardValor(
+                                  semana.maximo == null ? '' : String(semana.maximo).replace('.', ',')
+                                );
+                              }}
+                            >
+                              {editandoMetaChave === semana.chave ? 'Salvar' : 'Editar meta'}
+                            </button>
+                          </span>
+                        </p>
+                        <p>
+                          <span>Saldo</span>
+                          <strong
+                            className={
+                              semana.saldo == null ? '' : semana.saldo < 0 ? 'boletos-dash-neg' : 'boletos-dash-pos'
+                            }
+                          >
+                            {semana.saldo == null ? '—' : formatarMoeda(semana.saldo)}
+                          </strong>
+                        </p>
+                      </div>
+                      <div className="boletos-dash-progresso">
+                        <p>
+                          <span>Progresso</span>
+                          <span className={estourou ? 'boletos-dash-neg' : 'boletos-dash-ok'}>
+                            {progresso == null ? '—' : textoPercentual(progresso)}
+                          </span>
+                        </p>
+                        <div>
+                          <i
+                            className={estourou ? 'is-over' : atencao ? 'is-warn' : ''}
+                            style={{ width: `${Math.min(progresso || 0, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className="boletos-dash-table">
+            <div className="boletos-dash-panel-head">
+              <div>
+                <h3>Detalhamento dos lançamentos</h3>
+                <p>Filtre os pagamentos por semana para conferir os itens</p>
+              </div>
+              <label>
+                Filtrar tabela
+                <select value={filtroTabela} onChange={(e) => setFiltroTabela(e.target.value)}>
+                  <option value="ALL">Todas as semanas</option>
+                  {semanas.map((semana, indice) => (
+                    <option key={semana.chave} value={semana.chave}>
+                      Semana {indice + 1} ({formatarDataBr(semana.inicio)} a {formatarDataBr(semana.fim)})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="boletos-table-wrap boletos-table-wrap--plain">
+              <table className="boletos-table boletos-dash-grid">
                 <thead>
                   <tr>
-                    <th>Mês/Semana</th>
-                    <th>Total</th>
-                    <th>Máximo</th>
-                    <th>Saldo</th>
-                    <th>Lançamentos</th>
+                    <th>ID</th>
+                    <th>Descrição</th>
+                    <th>Tipo</th>
+                    <th>Vencimento efetivo</th>
+                    <th>Valor (R$)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {semanas.map((semana) => (
-                    <tr key={semana.chave} className={semana.saldo != null && semana.saldo < 0 ? 'boletos-acima' : ''}>
-                      <td>
-                        {formatarDataBr(semana.inicio)} a {formatarDataBr(semana.fim)}
-                      </td>
-                      <td>{formatarMoeda(semana.total)}</td>
-                      <td>{semana.maximo == null ? '—' : formatarMoeda(semana.maximo)}</td>
-                      <td>{semana.saldo == null ? '—' : formatarMoeda(semana.saldo)}</td>
-                      <td>{semana.quantidade}</td>
+                  {lancamentosTabela.length === 0 ? (
+                    <tr>
+                      <td colSpan={5}>Nenhum lançamento encontrado para este filtro.</td>
                     </tr>
-                  ))}
+                  ) : (
+                    lancamentosTabela.map((item) => (
+                      <tr key={item.id}>
+                        <td>{item.id}</td>
+                        <td className="boletos-desc">{item.descricao}</td>
+                        <td>
+                          <span
+                            className={
+                              item.tipo === 'Sem Boleto' ? 'boletos-pill boletos-pill--vista' : 'boletos-pill'
+                            }
+                          >
+                            {item.tipo}
+                          </span>
+                        </td>
+                        <td>{formatarDataBr(item.dt_vencimento_efetivo) || '—'}</td>
+                        <td className="boletos-valor">{formatarMoeda(Number(item.valor))}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
-          )}
-        </>
+          </section>
+        </div>
       ) : aba === 'cadastro' ? (
         <div className="boletos-lancamento">
           {formulario}
@@ -577,16 +813,8 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, simples = false, onMess
             <div className="boletos-registros-head">
               <h3>Registros Cadastrados</h3>
               <p>
-                {temFiltro ? 'Total filtrado' : 'Total da semana'}:{' '}
-                <strong>
-                  {formatarMoeda(
-                    somaValores(
-                      temFiltro
-                        ? boletosFiltrados
-                        : boletos.filter((item) => item.semana_inicio === semanaAtual?.inicio)
-                    )
-                  )}
-                </strong>
+                {filtroSemana || temFiltroData ? 'Total filtrado' : 'Total'}:{' '}
+                <strong>{formatarMoeda(somaValores(boletosFiltrados))}</strong>
               </p>
             </div>
             <div className="boletos-filtros">

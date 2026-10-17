@@ -561,6 +561,7 @@ function App() {
           ) : (
             <BoletosModulo
               restauranteId={restauranteSelecionado}
+              restauranteNome={restauranteAtual?.nome}
               simples={!isAdmin}
               onMessage={setError}
             />
