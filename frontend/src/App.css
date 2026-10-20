@@ -96,6 +96,97 @@
   color: white;
 }
 
+.restaurante-tarja {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 1.25rem;
+  color: #fff;
+  font-size: 0.95rem;
+}
+
+.restaurante-tarja strong {
+  font-size: 1.05rem;
+}
+
+.restaurante-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(15, 23, 42, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.restaurante-modal-card {
+  width: min(560px, 100%);
+  max-height: min(86vh, 720px);
+  overflow: auto;
+  background: #fff;
+  color: #1f2937;
+  border-radius: 16px;
+  padding: 1.25rem 1.25rem 1.1rem;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.28);
+}
+
+.restaurante-modal-card h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.25rem;
+}
+
+.restaurante-modal-card p {
+  margin: 0 0 1rem;
+  color: #52616f;
+  line-height: 1.45;
+}
+
+.restaurante-modal-lista {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.restaurante-opcao {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: left;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-left-width: 8px;
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1f2937;
+  cursor: pointer;
+}
+
+.restaurante-opcao i {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.restaurante-opcao.is-selected {
+  background: #ecfdf5;
+  border-color: #1f9d55;
+  box-shadow: 0 0 0 2px rgba(31, 157, 85, 0.2);
+}
+
+.restaurante-modal-card .btn-primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .empty-state {
   text-align: center;
   padding: 40px;

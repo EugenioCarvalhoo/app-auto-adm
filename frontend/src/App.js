@@ -17,6 +17,26 @@ import {
 } from './lib/userPermissoes';
 import { API_URL } from './config';
 
+const CORES_RESTAURANTE = [
+  '#0f766e',
+  '#b45309',
+  '#1d4ed8',
+  '#be123c',
+  '#6d28d9',
+  '#047857',
+  '#c2410c',
+  '#0369a1',
+  '#a16207',
+  '#7c3aed',
+  '#0e7490',
+  '#9f1239'
+];
+
+function corRestaurante(id) {
+  const indice = Math.abs(Number(id) || 0) % CORES_RESTAURANTE.length;
+  return CORES_RESTAURANTE[indice];
+}
+
 // Configurar axios para incluir token em todas as requisições
 axios.interceptors.request.use(
   (config) => {
@@ -48,6 +68,8 @@ function App() {
   const [gastos, setGastos] = useState([]);
   const [restaurantes, setRestaurantes] = useState([]);
   const [restauranteSelecionado, setRestauranteSelecionado] = useState(null);
+  const [restauranteConfirmado, setRestauranteConfirmado] = useState(false);
+  const [restaurantePendente, setRestaurantePendente] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -109,22 +131,26 @@ function App() {
   }, [isAuthenticated, user]);
 
   useEffect(() => {
-    if (isAuthenticated && restaurantes.length > 0) {
-      if (!restauranteSelecionado) {
-        setRestauranteSelecionado(restaurantes[0].id);
-      }
-      if (user && permissoesUsuario(user).financeiro) {
-        carregarGastos();
-      }
+    if (!isAuthenticated || restaurantes.length === 0 || !user) return;
+    const perguntar = !!user.is_admin || restaurantes.length > 1;
+    if (perguntar && !restauranteConfirmado) return;
+    if (!restauranteSelecionado) {
+      setRestauranteSelecionado(restaurantes[0].id);
+      setRestauranteConfirmado(true);
     }
-  }, [isAuthenticated, restauranteSelecionado, restaurantes, user]);
+    if (permissoesUsuario(user).financeiro && restauranteSelecionado) {
+      carregarGastos();
+    }
+  }, [isAuthenticated, restauranteSelecionado, restaurantes, user, restauranteConfirmado]);
 
   // Usuário somente estoque: se o restaurante atual saiu da lista permitida, voltar ao primeiro
   useEffect(() => {
     if (restaurantes.length === 0 || restauranteSelecionado == null) return;
     const ok = restaurantes.some((r) => r.id === restauranteSelecionado);
     if (!ok) {
-      setRestauranteSelecionado(restaurantes[0].id);
+      setRestauranteSelecionado(null);
+      setRestauranteConfirmado(false);
+      setRestaurantePendente(null);
     }
   }, [restaurantes, restauranteSelecionado]);
 
@@ -163,6 +189,9 @@ function App() {
     localStorage.removeItem('user');
     setUser(null);
     setIsAuthenticated(false);
+    setRestauranteSelecionado(null);
+    setRestauranteConfirmado(false);
+    setRestaurantePendente(null);
   };
 
   const carregarRestaurantes = async () => {
@@ -173,6 +202,8 @@ function App() {
     } catch (err) {
       console.error('Erro ao carregar restaurantes:', err);
       setError('Erro ao carregar restaurantes. Verifique se o servidor está rodando.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -336,6 +367,12 @@ function App() {
     );
   }
 
+  const confirmarRestaurante = () => {
+    if (restaurantePendente == null) return;
+    setRestauranteSelecionado(restaurantePendente);
+    setRestauranteConfirmado(true);
+  };
+
   const handleRestauranteChange = (e) => {
     const novoRestauranteId = parseInt(e.target.value);
     setRestauranteSelecionado(novoRestauranteId);
@@ -346,6 +383,8 @@ function App() {
   };
 
   const restauranteAtual = restaurantes.find((r) => r.id === restauranteSelecionado);
+  const corAtual = restauranteAtual ? corRestaurante(restauranteAtual.id) : null;
+  const perguntarRestaurante = (isAdmin || restaurantes.length > 1) && !restauranteConfirmado && restaurantes.length > 0;
 
   const hojeIso = () => {
     const d = new Date();
@@ -384,7 +423,14 @@ function App() {
 
   return (
     <div className="app">
-      <header className="app-header">
+      <header
+        className="app-header"
+        style={
+          corAtual
+            ? { boxShadow: `inset 0 7px 0 ${corAtual}, 0 2px 4px rgba(0, 0, 0, 0.1)` }
+            : undefined
+        }
+      >
         <div>
           <h1>{tituloApp}</h1>
           {user && (
@@ -482,6 +528,7 @@ function App() {
               value={restauranteSelecionado || ''}
               onChange={handleRestauranteChange}
               className="restaurante-select"
+              style={corAtual ? { borderColor: corAtual, boxShadow: `inset 4px 0 0 ${corAtual}` } : undefined}
             >
               {restaurantes.map(restaurante => (
                 <option key={restaurante.id} value={restaurante.id}>
@@ -500,6 +547,44 @@ function App() {
           </button>
         </div>
       </header>
+
+      {restauranteAtual && corAtual && (
+        <div className="restaurante-tarja" style={{ backgroundColor: corAtual }}>
+          <span>Restaurante atual</span>
+          <strong>{restauranteAtual.nome}</strong>
+        </div>
+      )}
+
+      {perguntarRestaurante && (
+        <div className="restaurante-modal" role="dialog" aria-modal="true" aria-labelledby="restaurante-modal-titulo">
+          <div className="restaurante-modal-card">
+            <h2 id="restaurante-modal-titulo">Em qual restaurante você vai entrar?</h2>
+            <p>Confirme a loja antes de lançar. A cor escolhida fica na tarja do topo enquanto você trabalha.</p>
+            <ul className="restaurante-modal-lista">
+              {restaurantes.map((restaurante) => {
+                const cor = corRestaurante(restaurante.id);
+                const ativo = restaurantePendente === restaurante.id;
+                return (
+                  <li key={restaurante.id}>
+                    <button
+                      type="button"
+                      className={ativo ? 'restaurante-opcao is-selected' : 'restaurante-opcao'}
+                      style={{ borderLeftColor: cor }}
+                      onClick={() => setRestaurantePendente(restaurante.id)}
+                    >
+                      <i style={{ backgroundColor: cor }} aria-hidden="true" />
+                      <span>{restaurante.nome}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <button type="button" className="btn-primary" disabled={restaurantePendente == null} onClick={confirmarRestaurante}>
+              Entrar neste restaurante
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="error-message">

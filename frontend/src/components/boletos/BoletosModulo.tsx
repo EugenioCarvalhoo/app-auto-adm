@@ -157,19 +157,21 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
     onMessage?.(null);
     try {
       const params = { restaurante_id: restauranteId };
-      if (simples) {
-        const lista = await axios.get<Boleto[]>(`${API_URL}/boletos`, { params });
-        setBoletos(lista.data || []);
-      } else {
-        const [lista, resumo, listaMetas] = await Promise.all([
-          axios.get<Boleto[]>(`${API_URL}/boletos`, { params }),
-          axios.get<{ semanas: SemanaResumo[]; total_geral: number }>(`${API_URL}/boletos/resumo`, { params }),
-          axios.get<Meta[]>(`${API_URL}/boletos/metas`, { params })
-        ]);
-        setBoletos(lista.data || []);
-        setSemanas(resumo.data?.semanas || []);
-        setMetas(listaMetas.data || []);
+      const pedidos: Promise<unknown>[] = [
+        axios.get<Boleto[]>(`${API_URL}/boletos`, { params }),
+        axios.get<{ semanas: SemanaResumo[]; total_geral: number }>(`${API_URL}/boletos/resumo`, { params })
+      ];
+      if (!simples) {
+        pedidos.push(axios.get<Meta[]>(`${API_URL}/boletos/metas`, { params }));
       }
+      const [lista, resumo, listaMetas] = (await Promise.all(pedidos)) as [
+        { data: Boleto[] },
+        { data: { semanas: SemanaResumo[] } },
+        { data: Meta[] } | undefined
+      ];
+      setBoletos(lista.data || []);
+      setSemanas(resumo.data?.semanas || []);
+      setMetas(listaMetas?.data || []);
     } catch (error) {
       onMessage?.(mensagemErro(error, 'Não foi possível carregar boletos e notas.'));
     } finally {
@@ -180,6 +182,11 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
   useEffect(() => {
     carregar();
   }, [carregar]);
+
+  useEffect(() => {
+    setFiltroTabela('ALL');
+    setFiltroSemana('');
+  }, [restauranteId]);
 
   const opcoesSemana = useMemo(() => {
     const mapa = new Map<string, string>();
@@ -571,7 +578,6 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
             dias.
           </p>
         </div>
-        {!simples && (
           <div className="boletos-abas" role="tablist">
             <button type="button" className={aba === 'resumo' ? 'active' : ''} onClick={() => setAba('resumo')}>
               Totais da semana
@@ -579,42 +585,16 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
             <button type="button" className={aba === 'cadastro' ? 'active' : ''} onClick={() => setAba('cadastro')}>
               Cadastro
             </button>
-            <button type="button" className={aba === 'metas' ? 'active' : ''} onClick={() => setAba('metas')}>
-              Meta de gasto
-            </button>
+            {!simples && (
+              <button type="button" className={aba === 'metas' ? 'active' : ''} onClick={() => setAba('metas')}>
+                Meta de gasto
+              </button>
+            )}
           </div>
-        )}
       </header>
 
       {loading ? (
         <p className="boletos-empty">Carregando…</p>
-      ) : simples ? (
-        <div className="boletos-lancamento">
-          {formulario}
-          <section className="boletos-registros">
-            <div className="boletos-registros-head">
-              <h3>Registros Cadastrados</h3>
-              <p>
-                {filtroSemana ? 'Total da semana' : 'Total'}:{' '}
-                <strong>{formatarMoeda(somaValores(boletosFiltrados))}</strong>
-              </p>
-            </div>
-            <div className="boletos-filtros">
-              <label>
-                Semana
-                <select value={filtroSemana} onChange={(e) => setFiltroSemana(e.target.value)}>
-                  <option value="">Todas</option>
-                  {opcoesSemana.map(([inicio, fim]) => (
-                    <option key={inicio} value={inicio}>
-                      {formatarDataBr(inicio)} a {formatarDataBr(fim)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            {tabelaRegistros(boletosFiltrados, 'Nenhum lançamento nesta semana.')}
-          </section>
-        </div>
       ) : aba === 'resumo' ? (
         <div className="boletos-dash">
           <header className="boletos-dash-head">
@@ -656,7 +636,7 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
                 <h3>Comparativo de semanas e metas</h3>
                 <p>Visão simultânea de todos os períodos de vencimento</p>
               </div>
-              <span>Clique em Editar meta para alterar o teto da semana.</span>
+              <span>{simples ? 'Somente consulta da meta.' : 'Clique em Editar meta para alterar o teto da semana.'}</span>
             </div>
             {semanas.length === 0 ? (
               <p className="boletos-dash-empty">Nenhum lançamento ou meta neste restaurante.</p>
@@ -698,22 +678,24 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
                                 {semana.maximo == null ? '—' : formatarMoeda(semana.maximo)}
                               </strong>
                             )}
-                            <button
-                              type="button"
-                              disabled={salvando}
-                              onClick={() => {
-                                if (editandoMetaChave === semana.chave) {
-                                  void salvarMetaCard(semana);
-                                  return;
-                                }
-                                setEditandoMetaChave(semana.chave);
-                                setMetaCardValor(
-                                  semana.maximo == null ? '' : String(semana.maximo).replace('.', ',')
-                                );
-                              }}
-                            >
-                              {editandoMetaChave === semana.chave ? 'Salvar' : 'Editar meta'}
-                            </button>
+                            {!simples && (
+                              <button
+                                type="button"
+                                disabled={salvando}
+                                onClick={() => {
+                                  if (editandoMetaChave === semana.chave) {
+                                    void salvarMetaCard(semana);
+                                    return;
+                                  }
+                                  setEditandoMetaChave(semana.chave);
+                                  setMetaCardValor(
+                                    semana.maximo == null ? '' : String(semana.maximo).replace('.', ',')
+                                  );
+                                }}
+                              >
+                                {editandoMetaChave === semana.chave ? 'Salvar' : 'Editar meta'}
+                              </button>
+                            )}
                           </span>
                         </p>
                         <p>
@@ -829,6 +811,8 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
                   ))}
                 </select>
               </label>
+              {!simples && (
+                <>
               <div className="boletos-filtro-range">
                 <span>Data de recebimento</span>
                 <div className="boletos-filtro-range-campos">
@@ -871,6 +855,8 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
                   </label>
                 </div>
               </div>
+                </>
+              )}
               {temFiltro && (
                 <button
                   type="button"
