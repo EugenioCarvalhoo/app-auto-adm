@@ -51,6 +51,18 @@ Back em `:5000`, front em `:3000`. Variáveis em `backend/.env` (modelo: `backen
 - Antes de mexer em auth, rode `cd backend && npm test`. O script sobe sozinho o Postgres de teste (container `pg-controle`, porta 5433); os testes só rodam em banco terminado em `_test`.
 - Mudanças em contrato de API: atualizar back e `BoletosModulo.tsx` na mesma tarefa.
 
+## Agentes por camada (`.claude/agents/`)
+| Agente | Responsabilidade | Edita |
+|---|---|---|
+| `backend-api` | rotas, middlewares, regra de acesso | `backend/{routes,middleware,lib,db.js,server.js}` |
+| `database-migrations` | schema, migrations (DROP só com confirmação) | `backend/database/` |
+| `frontend-ui` | telas, componentes, axios | `frontend/src` |
+| `qa-tests` | Jest, Playwright, testes do front; reporta bugs sem corrigir produção | `backend/test`, `e2e/`, `*.test.js` |
+| `security-reviewer` | auditoria somente-leitura (IDOR, auth, segredos) | nada |
+| `devops-docs` | CI, Docker, deploy, documentação | `.github/`, Dockerfiles, `docs/`, `CLAUDE.md` |
+
+Fluxo para mudança que atravessa camadas: `database-migrations` (schema) → `backend-api` (contrato) → `frontend-ui` (mesma tarefa, conforme "Regras para o Claude") → `qa-tests` (cobertura) → `security-reviewer` (se mexeu em auth/acesso) → `devops-docs` (docs/CI). Cada agente devolve ao dono da camada o que está fora do seu escopo.
+
 ## Documentação
 Histórico das etapas já feitas, decisões e próximos passos: `docs/HISTORICO-ETAPAS.md` (leia primeiro ao retomar o trabalho).
 Os guias `*_EASYPANEL.md` na raiz são históricos de troubleshooting de deploy; só consulte se o problema for deploy. Plano de limpeza: `docs/PLANO-DE-ACAO.md`.
