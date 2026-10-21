@@ -7,28 +7,16 @@ import {
 
 describe('permissoesUsuario', () => {
   it('sem usuário: nada liberado', () => {
-    expect(permissoesUsuario(null)).toEqual({
-      financeiro: false,
-      estoque: false,
-      estoqueSimplificado: false,
-      boletos: false
-    });
+    expect(permissoesUsuario(null)).toEqual({ admin: false, boletos: false });
   });
 
   it('admin tem todos os módulos', () => {
-    expect(permissoesUsuario({ is_admin: true })).toEqual({
-      financeiro: true,
-      estoque: true,
-      estoqueSimplificado: true,
-      boletos: true
-    });
+    expect(permissoesUsuario({ is_admin: true })).toEqual({ admin: true, boletos: true });
   });
 
   it('usuário comum só tem o que o admin liberou', () => {
     const p = permissoesUsuario({ is_admin: false, modulo_boletos: true });
-    expect(p.boletos).toBe(true);
-    expect(p.financeiro).toBe(false);
-    expect(p.estoque).toBe(false);
+    expect(p).toEqual({ admin: false, boletos: true });
   });
 
   it('usuário comum com boletos desligado não tem boletos', () => {

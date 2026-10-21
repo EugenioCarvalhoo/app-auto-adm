@@ -1,20 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './App.css';
-import GridEditavel from './components/GridEditavel';
 import Login from './components/Login';
 import CadastroRestaurantes from './components/CadastroRestaurantes';
-import Relatorios from './components/Relatorios';
-import EstoqueShell from './components/estoque/EstoqueShell';
 import AdminDashboard from './components/AdminDashboard';
 import AdminPermissoesUsuarios from './components/AdminPermissoesUsuarios';
 import BoletosModulo from './components/boletos/BoletosModulo';
-import {
-  estoqueViewInicial,
-  permissoesUsuario,
-  telaInicialUsuario,
-  usuarioTemAlgumModulo
-} from './lib/userPermissoes';
+import { permissoesUsuario, telaInicialUsuario, usuarioTemAlgumModulo } from './lib/userPermissoes';
 import { API_URL } from './config';
 
 const CORES_RESTAURANTE = [
@@ -55,7 +47,8 @@ axios.interceptors.request.use(
 axios.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // 401 no próprio login é senha errada: a tela de login mostra o erro, sem recarregar
+    if (error.response?.status === 401 && !String(error.config?.url || '').endsWith('/login')) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.reload();
@@ -65,7 +58,6 @@ axios.interceptors.response.use(
 );
 
 function App() {
-  const [gastos, setGastos] = useState([]);
   const [restaurantes, setRestaurantes] = useState([]);
   const [restauranteSelecionado, setRestauranteSelecionado] = useState(null);
   const [restauranteConfirmado, setRestauranteConfirmado] = useState(false);
@@ -80,19 +72,9 @@ function App() {
       const u = JSON.parse(localStorage.getItem('user') || '{}');
       return telaInicialUsuario(u);
     } catch {
-      return 'gastos';
+      return 'boletos';
     }
   });
-  const [estoqueView, setEstoqueView] = useState(() => {
-    try {
-      const u = JSON.parse(localStorage.getItem('user') || '{}');
-      return estoqueViewInicial(u);
-    } catch {
-      return 'resumo';
-    }
-  });
-  const [msgEstoque, setMsgEstoque] = useState(null);
-  const [estoqueMovPresetPeriodo, setEstoqueMovPresetPeriodo] = useState(null);
 
   useEffect(() => {
     verificarAutenticacao();
@@ -107,28 +89,8 @@ function App() {
   useEffect(() => {
     if (!user || user.is_admin) return;
     const p = permissoesUsuario(user);
-    const telaFinanceira = telaAtual === 'gastos' || telaAtual === 'relatorios' || telaAtual === 'restaurantes';
-    if (telaFinanceira && !p.financeiro) {
-      setTelaAtual(telaInicialUsuario(user));
-      if (p.estoque || p.estoqueSimplificado) setEstoqueView(estoqueViewInicial(user));
-    } else if (telaAtual === 'boletos' && !p.boletos) {
-      setTelaAtual(telaInicialUsuario(user));
-    } else if (telaAtual === 'estoque' && !p.estoque && !p.estoqueSimplificado) {
-      setTelaAtual(telaInicialUsuario(user));
-    }
+    if (telaAtual !== 'boletos' || !p.boletos) setTelaAtual(telaInicialUsuario(user));
   }, [user, telaAtual]);
-
-  useEffect(() => {
-    if (telaAtual === 'inicio' && user && !user.is_admin) {
-      setTelaAtual(telaInicialUsuario(user));
-    }
-  }, [telaAtual, user]);
-
-  useEffect(() => {
-    if (isAuthenticated && user && !permissoesUsuario(user).financeiro && !user.is_admin) {
-      setLoading(false);
-    }
-  }, [isAuthenticated, user]);
 
   useEffect(() => {
     if (!isAuthenticated || restaurantes.length === 0 || !user) return;
@@ -138,12 +100,9 @@ function App() {
       setRestauranteSelecionado(restaurantes[0].id);
       setRestauranteConfirmado(true);
     }
-    if (permissoesUsuario(user).financeiro && restauranteSelecionado) {
-      carregarGastos();
-    }
   }, [isAuthenticated, restauranteSelecionado, restaurantes, user, restauranteConfirmado]);
 
-  // Usuário somente estoque: se o restaurante atual saiu da lista permitida, voltar ao primeiro
+  // Se o restaurante atual saiu da lista permitida, voltar ao primeiro
   useEffect(() => {
     if (restaurantes.length === 0 || restauranteSelecionado == null) return;
     const ok = restaurantes.some((r) => r.id === restauranteSelecionado);
@@ -156,7 +115,6 @@ function App() {
 
   const verificarAutenticacao = async () => {
     const token = localStorage.getItem('token');
-    const savedUser = localStorage.getItem('user');
 
     if (!token) {
       setCheckingAuth(false);
@@ -181,7 +139,6 @@ function App() {
     setUser(userData);
     setIsAuthenticated(true);
     setTelaAtual(telaInicialUsuario(userData));
-    setEstoqueView(estoqueViewInicial(userData));
   };
 
   const handleLogout = () => {
@@ -207,132 +164,6 @@ function App() {
     }
   };
 
-  const carregarGastos = async () => {
-    if (!restauranteSelecionado) return;
-    
-    try {
-      setLoading(true);
-      const response = await axios.get(`${API_URL}/gastos?restaurante_id=${restauranteSelecionado}`);
-      setGastos(response.data);
-      setError(null);
-    } catch (err) {
-      console.error('Erro ao carregar gastos:', err);
-      setError('Erro ao carregar gastos. Verifique se o servidor está rodando.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const salvarGastos = async (gastosAtualizados, recarregar = true) => {
-    console.log('╔═══════════════════════════════════════════════════════════╗');
-    console.log('[APP] ═══ SALVARGASTOS INICIADO ═══');
-    console.log('[APP] Parâmetros:', { 
-      quantidade: gastosAtualizados.length, 
-      recarregar,
-      restauranteSelecionado 
-    });
-    console.log('[APP] Gastos recebidos:', JSON.parse(JSON.stringify(gastosAtualizados)));
-    
-    try {
-      
-      if (!restauranteSelecionado) {
-        console.error('[APP] ❌ ERRO: Nenhum restaurante selecionado');
-        setError('Selecione um restaurante antes de salvar gastos.');
-        return;
-      }
-      
-      // Garantir que todos os gastos tenham restaurante_id e todos os campos necessários
-      const gastosComRestaurante = gastosAtualizados.map((gasto, index) => {
-        const gastoProcessado = {
-          id: gasto.id || null,
-          data: gasto.data || '',
-          descricao: gasto.descricao || '',
-          valor: gasto.valor !== undefined && gasto.valor !== null ? gasto.valor : null,
-          observacao: gasto.observacao || '',
-          pago: gasto.pago !== undefined ? gasto.pago : false,
-          retroativo: gasto.retroativo !== undefined ? gasto.retroativo : false,
-          restaurante_id: gasto.restaurante_id || restauranteSelecionado
-        };
-        console.log(`[APP] Gasto ${index + 1} processado:`, JSON.parse(JSON.stringify(gastoProcessado)));
-        return gastoProcessado;
-      });
-      
-      console.log('[APP] Total de gastos processados:', gastosComRestaurante.length);
-      
-      // Separar novos e existentes
-      const novos = gastosComRestaurante.filter(g => !g.id);
-      const existentes = gastosComRestaurante.filter(g => g.id);
-      
-      console.log('[APP] Novos gastos:', novos.length);
-      console.log('[APP] Gastos existentes:', existentes.length);
-
-      // Criar novos
-      for (let i = 0; i < novos.length; i++) {
-        const gasto = novos[i];
-        if (gasto.descricao || gasto.data) {
-          console.log(`[APP] Criando novo gasto ${i + 1}:`, JSON.parse(JSON.stringify(gasto)));
-          const response = await axios.post(`${API_URL}/gastos`, gasto);
-          console.log(`[APP] ✅ Novo gasto criado:`, response.data);
-        } else {
-          console.log(`[APP] ⚠️ Pulando gasto ${i + 1} - sem descrição ou data`);
-        }
-      }
-
-      // Atualizar existentes
-      for (let i = 0; i < existentes.length; i++) {
-        const gasto = existentes[i];
-        console.log(`[APP] Atualizando gasto ${i + 1} (ID: ${gasto.id}):`, JSON.parse(JSON.stringify(gasto)));
-        const response = await axios.put(`${API_URL}/gastos/${gasto.id}`, gasto);
-        console.log(`[APP] ✅ Gasto atualizado:`, response.data);
-      }
-
-      // Recarregar lista apenas se solicitado (evita re-render durante navegação com Tab)
-      if (recarregar) {
-        console.log('[APP] 🔄 Recarregando gastos do servidor...');
-        await carregarGastos();
-        console.log('[APP] ✅ Gastos recarregados');
-      } else {
-        console.log('[APP] ⚠️ Pulando recarregamento para evitar perda de foco');
-        // Atualizar estado local sem recarregar do servidor
-        setGastos(prevGastos => {
-          const novosGastos = [...prevGastos];
-          gastosComRestaurante.forEach(gastoAtualizado => {
-            if (gastoAtualizado.id) {
-              // Atualizar existente
-              const index = novosGastos.findIndex(g => g.id === gastoAtualizado.id);
-              if (index !== -1) {
-                console.log('[APP] Atualizando gasto local (ID:', gastoAtualizado.id, '):', JSON.parse(JSON.stringify(gastoAtualizado)));
-                novosGastos[index] = { ...novosGastos[index], ...gastoAtualizado };
-              } else {
-                console.log('[APP] ⚠️ Gasto não encontrado localmente para atualizar (ID:', gastoAtualizado.id, ')');
-              }
-            } else {
-              // Adicionar novo (será atualizado quando recarregar)
-              console.log('[APP] Adicionando novo gasto local:', JSON.parse(JSON.stringify(gastoAtualizado)));
-              novosGastos.push(gastoAtualizado);
-            }
-          });
-          console.log('[APP] Total de gastos após atualização local:', novosGastos.length);
-          return novosGastos;
-        });
-      }
-    } catch (err) {
-      console.error('[APP] ❌ ERRO ao salvar gastos:', err);
-      console.error('[APP] Detalhes do erro:', err.response?.data || err.message);
-      setError('Erro ao salvar gastos. Tente novamente.');
-    }
-  };
-
-  const deletarGasto = async (id) => {
-    try {
-      await axios.delete(`${API_URL}/gastos/${id}`);
-      await carregarGastos();
-    } catch (err) {
-      console.error('Erro ao deletar gasto:', err);
-      setError('Erro ao deletar gasto. Tente novamente.');
-    }
-  };
-
   if (checkingAuth) {
     return (
       <div className="app">
@@ -347,19 +178,10 @@ function App() {
 
   const perms = permissoesUsuario(user);
   const isAdmin = !!user?.is_admin;
-  const acessoFinanceiro = perms.financeiro;
-  const acessoEstoque = perms.estoque;
-  const acessoEstoqueSimplificado = perms.estoqueSimplificado;
   const acessoBoletos = perms.boletos;
-  const acessoQualquerEstoque = acessoEstoque || acessoEstoqueSimplificado;
-  const tituloApp =
-    acessoBoletos && !acessoFinanceiro && !acessoQualquerEstoque
-      ? 'Boletos e Notas'
-      : !acessoFinanceiro && acessoQualquerEstoque
-        ? 'Estoque'
-        : 'Controle Financeiro - Multi Restaurante';
+  const tituloApp = isAdmin ? 'Controle Financeiro - Multi Restaurante' : 'Boletos e Notas';
 
-  if (loading && acessoFinanceiro) {
+  if (loading) {
     return (
       <div className="app">
         <div className="loading">Carregando...</div>
@@ -385,41 +207,6 @@ function App() {
   const restauranteAtual = restaurantes.find((r) => r.id === restauranteSelecionado);
   const corAtual = restauranteAtual ? corRestaurante(restauranteAtual.id) : null;
   const perguntarRestaurante = (isAdmin || restaurantes.length > 1) && !restauranteConfirmado && restaurantes.length > 0;
-
-  const hojeIso = () => {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  };
-
-  const irParaEstoque = (view = 'resumo', opts = {}) => {
-    const viewsOk = ['resumo', 'diario', 'visao', 'categorias', 'produtos', 'movimentacao'];
-    let v = viewsOk.includes(view) ? view : 'resumo';
-    if (v === 'diario' && !perms.estoqueSimplificado) v = perms.estoque ? 'resumo' : 'diario';
-    if (v !== 'diario' && !perms.estoque) v = 'diario';
-    setEstoqueView(v);
-    if (opts?.periodoHoje && view === 'movimentacao') {
-      const h = hojeIso();
-      setEstoqueMovPresetPeriodo({
-        data_inicio: h,
-        data_fim: h,
-        token: Date.now()
-      });
-    } else {
-      setEstoqueMovPresetPeriodo(null);
-    }
-    setTelaAtual('estoque');
-    setMsgEstoque(null);
-    // Após o painel montar, leva o usuário até o lançamento (feedback ao tocar na aba)
-    setTimeout(() => {
-      document.getElementById('estoque-lancamento-panel')?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-      });
-    }, 0);
-  };
 
   return (
     <div className="app">
@@ -457,32 +244,14 @@ function App() {
                 Boletos e notas
               </button>
             )}
-            {acessoFinanceiro && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setTelaAtual('gastos')}
-                  className={telaAtual === 'gastos' ? 'nav-tab active' : 'nav-tab'}
-                >
-                  Gastos
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTelaAtual('relatorios')}
-                  className={telaAtual === 'relatorios' ? 'nav-tab active' : 'nav-tab'}
-                >
-                  Relatórios
-                </button>
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => setTelaAtual('restaurantes')}
-                    className={telaAtual === 'restaurantes' ? 'nav-tab active' : 'nav-tab'}
-                  >
-                    Restaurantes
-                  </button>
-                )}
-              </>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setTelaAtual('restaurantes')}
+                className={telaAtual === 'restaurantes' ? 'nav-tab active' : 'nav-tab'}
+              >
+                Restaurantes
+              </button>
             )}
             {isAdmin && (
               <button
@@ -496,36 +265,8 @@ function App() {
                 Usuários
               </button>
             )}
-            {acessoEstoque && (
-              <button
-                type="button"
-                onClick={() => irParaEstoque('resumo')}
-                className={
-                  telaAtual === 'estoque' && estoqueView !== 'diario' ? 'nav-tab active' : 'nav-tab'
-                }
-              >
-                Estoque
-              </button>
-            )}
-            {acessoEstoqueSimplificado && (
-              <button
-                type="button"
-                onClick={() => irParaEstoque('diario')}
-                className={
-                  telaAtual === 'estoque' && estoqueView === 'diario' ? 'nav-tab active' : 'nav-tab'
-                }
-              >
-                Lançamento diário
-              </button>
-            )}
           </div>
-          {(telaAtual === 'gastos' ||
-            telaAtual === 'estoque' ||
-            telaAtual === 'boletos' ||
-            telaAtual === 'inicio' ||
-            telaAtual === 'relatorios' ||
-            ((acessoQualquerEstoque || acessoBoletos) && !acessoFinanceiro)) &&
-            restaurantes.length > 0 && (
+          {restaurantes.length > 0 && (
             <select
               value={restauranteSelecionado || ''}
               onChange={handleRestauranteChange}
@@ -538,11 +279,6 @@ function App() {
                 </option>
               ))}
             </select>
-          )}
-          {telaAtual === 'gastos' && acessoFinanceiro && (
-            <button type="button" onClick={carregarGastos} className="btn-refresh">
-              Atualizar
-            </button>
           )}
           <button type="button" onClick={handleLogout} className="btn-logout">
             Sair
@@ -593,12 +329,6 @@ function App() {
           {error}
         </div>
       )}
-      {msgEstoque && (
-        <div className="error-message" role="status">
-          {msgEstoque}
-        </div>
-      )}
-
       <main className="app-main">
         {!usuarioTemAlgumModulo(user) ? (
           <div className="empty-state">
@@ -608,38 +338,13 @@ function App() {
           <AdminDashboard
             restauranteId={restauranteSelecionado}
             restauranteNome={restauranteAtual?.nome}
-            gastos={gastos}
-            onIrParaGastos={() => setTelaAtual('gastos')}
-            onIrParaRelatorios={() => setTelaAtual('relatorios')}
-            onIrParaEstoque={(view) => irParaEstoque(view || 'resumo')}
-            onIrParaMovimentacaoHoje={() => irParaEstoque('movimentacao', { periodoHoje: true })}
             onIrParaBoletos={() => setTelaAtual('boletos')}
             onIrParaRestaurantes={() => setTelaAtual('restaurantes')}
-            onIrParaUsuariosEstoque={() => {
+            onIrParaUsuarios={() => {
               setError(null);
               setTelaAtual('permissoes');
             }}
           />
-        ) : telaAtual === 'estoque' && acessoQualquerEstoque ? (
-          restaurantes.length === 0 ? (
-            <div className="empty-state">
-              <p>Nenhum restaurante disponível. Peça ao administrador para cadastrar um restaurante.</p>
-            </div>
-          ) : (
-            <EstoqueShell
-              restauranteId={restauranteSelecionado}
-              restaurantes={restaurantes}
-              isAdmin={isAdmin}
-              modulos={{
-                estoque: perms.estoque,
-                simplificado: perms.estoqueSimplificado
-              }}
-              view={estoqueView}
-              onViewChange={setEstoqueView}
-              onMessage={setMsgEstoque}
-              movimentoPeriodoPreset={estoqueMovPresetPeriodo}
-            />
-          )
         ) : telaAtual === 'boletos' && acessoBoletos ? (
           restaurantes.length === 0 || !restauranteSelecionado ? (
             <div className="empty-state">
@@ -653,24 +358,6 @@ function App() {
               onMessage={setError}
             />
           )
-        ) : telaAtual === 'gastos' && acessoFinanceiro ? (
-          restaurantes.length === 0 ? (
-            <div className="empty-state">
-              <p>Nenhum restaurante cadastrado. Por favor, cadastre um restaurante primeiro.</p>
-              <button type="button" onClick={() => setTelaAtual('restaurantes')} className="btn-primary">
-                Cadastrar Restaurante
-              </button>
-            </div>
-          ) : (
-            <GridEditavel
-              gastos={gastos}
-              onSave={salvarGastos}
-              onDelete={deletarGasto}
-              restauranteId={restauranteSelecionado}
-            />
-          )
-        ) : telaAtual === 'relatorios' && acessoFinanceiro ? (
-          <Relatorios restauranteId={restauranteSelecionado} />
         ) : telaAtual === 'permissoes' && isAdmin ? (
           <AdminPermissoesUsuarios onError={(msg) => setError(msg)} />
         ) : telaAtual === 'restaurantes' && isAdmin ? (
