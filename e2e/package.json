@@ -1,0 +1,19 @@
+{
+  "name": "controle-financeiro-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Testes E2E (Playwright) com Postgres real de teste",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:slow": "cross-env SLOWMO=800 playwright test --headed --timeout=120000",
+    "test:debug": "playwright test --debug",
+    "report": "playwright show-report",
+    "install:browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1",
+    "cross-env": "^7.0.3"
+  }
+}

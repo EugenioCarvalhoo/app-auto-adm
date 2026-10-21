@@ -59,8 +59,14 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
 ### Pipeline de CI/deploy (21/10/2026)
 - Criado `.github/workflows/ci-deploy.yml` (GitHub Actions): `backend` (Jest com Postgres 15 de serviço), `frontend` (testes, `tsc`, build), `docker` (build das duas imagens) e, só se tudo passar, deploy por webhook do Easypanel: branch `homologacao` -> hml; branch `main` -> produção (ambiente `producao` com aprovação manual).
 - Validado só localmente (YAML, Jest, build, `npm ci --dry-run`); **ainda não rodou no GitHub**.
-- Build do front no CI usa `CI=false` porque, com `CI=true`, avisos de lint de `App.js`, `GridEditavel` e `Relatorios` viram erro. Remover isso depois da limpeza dos módulos legados.
+- O build do front no CI usa `CI=true` (lint rigoroso) desde a Fase 2.
 - Pendente do usuário: criar branch `homologacao`; criar secrets `EASYPANEL_HML_API_WEBHOOK`, `EASYPANEL_HML_WEB_WEBHOOK`, `EASYPANEL_PROD_API_WEBHOOK`, `EASYPANEL_PROD_WEB_WEBHOOK`; criar ambientes `homologacao` e `producao` (reviewers na produção); desligar o deploy automático por push no Easypanel. A migration continua manual (`npm run migrate` no terminal do back) ou via Comando de Início `node database/migrate.js && node server.js`.
+
+### Testes E2E com Playwright (21/10/2026)
+- Pasta `e2e/` (projeto próprio): 39 testes em 6 suítes (login/sessão, acesso por perfil, boletos, metas, administração, isolamento direto na API). Detalhes em `e2e/README.md`.
+- Sobe API (`:5100`) e front (`:3100`) contra o banco `controle_financeiro_e2e_test` no mesmo container `pg-controle`; semeia o cenário do Jest antes de cada teste. Job `e2e` adicionado ao CI e exigido pelos deploys.
+- **Bug achado e corrigido:** o interceptor global do axios tratava o 401 do próprio login como sessão expirada e recarregava a página, apagando a mensagem de erro. Agora ignora a URL `/login`.
+- Observação: a tela de Usuários (`AdminPermissoesUsuarios.tsx`) ainda mostra as flags legadas (Financeiro, Estoque, Estoque simplificado); sai na limpeza das fases 3 e 4.
 
 ### Homologação (banco `financialmanagementbdhomolog`)
 - Migration executada: `001` a `015` aplicadas; segunda execução pulou todas.
@@ -78,7 +84,7 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
 
 ## 5. Próximos passos (ordem sugerida)
 1. Commit em branch (ex.: `regra-acesso-admin`) com a regra, a `015`, o `migrate.js`, os testes e os docs.
-2. Fase 2: remover o front legado (`GridEditavel`, `Relatorios`, `components/estoque/`, `Estoque.css`, `AdminUsuariosEstoque`), simplificar `App.js`, `AdminDashboard.tsx` e `userPermissoes.js`.
+2. ~~Fase 2~~ **feita (21/10/2026)**: remover o front legado (`GridEditavel`, `Relatorios`, `components/estoque/`, `Estoque.css`, `AdminUsuariosEstoque`), simplificar `App.js`, `AdminDashboard.tsx` e `userPermissoes.js`.
 3. Fase 3: remover do `server.js` as rotas `/api/gastos*`, `/api/estoque*`, `/api/admin/usuarios-estoque*` e seus helpers; dividir o que sobrar em módulos.
 4. Fase 4: nova migration (ex.: `016`) para renomear `usuario_restaurante_estoque` para `usuario_restaurantes` e, só depois de validar, `DROP` das tabelas e colunas legadas. Confirmar antes de qualquer `DROP`.
 5. Fase 5: `JWT_SECRET` obrigatório em produção (falhar se ausente), reduzir logs de login, baixar o limite de `express.json` (hoje 50mb), rate limit no login.

@@ -9,12 +9,13 @@ Sistema web para restaurantes. Escopo ativo: **(1) cadastro de boletos/notas com
 
 ## Comandos
 ```bash
-npm run install-all          # raiz + frontend (backend usa o package.json de backend/)
+npm run install-all          # raiz + frontend + e2e (backend usa o package.json de backend/)
 npm run dev                  # back (nodemon) + front juntos
 npm run migrate              # aplica backend/database/migrations
 npm run create-admin         # cria usuário admin
 cd backend && npm test       # sobe o Postgres de teste (Docker) se preciso e roda Jest + Supertest (ver backend/test/README.md)
 cd frontend && CI=true npm test
+cd e2e && npm test          # Playwright (Chromium) com Postgres real; ver e2e/README.md
 ```
 Back em `:5000`, front em `:3000`. Variáveis em `backend/.env` (modelo: `backend/.env.example`). `JWT_SECRET` é obrigatório em produção.
 

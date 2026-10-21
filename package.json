@@ -7,10 +7,11 @@
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "nodemon backend/server.js",
     "client": "cd frontend && npm start",
-    "install-all": "npm install && cd frontend && npm install",
+    "install-all": "npm install && cd frontend && npm install && cd ../e2e && npm install",
     "migrate": "node backend/database/migrate.js",
     "create-admin": "node backend/database/create_admin.js",
-    "get-ip": "node get-ip.js"
+    "get-ip": "node get-ip.js",
+    "test:e2e": "cd e2e && npx playwright test"
   },
   "keywords": [],
   "author": "",
@@ -28,4 +29,3 @@
     "concurrently": "^8.2.2"
   }
 }
-
