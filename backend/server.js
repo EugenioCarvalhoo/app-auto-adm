@@ -258,17 +258,21 @@ function dateToIso(value) {
   return null;
 }
 
+// Limite de NUMERIC(14,2): 12 dígitos inteiros. Acima disso o Postgres devolve erro (500).
+const VALOR_BOLETO_MAX = 999999999999.99;
+
 function parseValorBoleto(raw) {
   if (raw === null || raw === undefined || raw === '') return null;
+  let value;
   if (typeof raw === 'number') {
-    if (!Number.isFinite(raw) || raw < 0) return null;
-    return Math.round(raw * 100) / 100;
+    value = raw;
+  } else {
+    const text = String(raw).trim().replace(/\s/g, '').replace(/^R\$/i, '');
+    if (!text) return null;
+    const normalized = text.includes(',') ? text.replace(/\./g, '').replace(',', '.') : text;
+    value = Number(normalized);
   }
-  const text = String(raw).trim().replace(/\s/g, '').replace(/^R\$/i, '');
-  if (!text) return null;
-  const normalized = text.includes(',') ? text.replace(/\./g, '').replace(',', '.') : text;
-  const value = Number(normalized);
-  if (!Number.isFinite(value) || value < 0) return null;
+  if (!Number.isFinite(value) || value < 0 || value > VALOR_BOLETO_MAX) return null;
   return Math.round(value * 100) / 100;
 }
 
@@ -349,8 +353,9 @@ async function inserirMovimentoEstoque(
 
 function parseDateOnly(s) {
   if (!s || typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
-  const d = new Date(`${s}T12:00:00`);
-  return Number.isNaN(d.getTime()) ? null : s;
+  const d = new Date(`${s}T12:00:00Z`);
+  // Rejeita datas impossíveis (ex.: 2026-02-31), que o JS "rola" para o mês seguinte.
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s ? null : s;
 }
 
 function parseDataEntradaLancamentoDiario(s) {
