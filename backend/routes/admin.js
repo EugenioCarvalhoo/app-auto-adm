@@ -1,0 +1,292 @@
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const pool = require('../db');
+const { authenticateToken } = require('../middleware/auth');
+const { requireAdmin } = require('../middleware/permissoes');
+
+const router = express.Router();
+
+// ========== Admin: permissões por módulo ==========
+
+async function listarRestauranteIdsUsuario(userId, db = pool) {
+  const assoc = await db.query(
+    'SELECT restaurante_id FROM usuario_restaurante_estoque WHERE usuario_id = $1 ORDER BY restaurante_id',
+    [userId]
+  );
+  return assoc.rows.map((row) => row.restaurante_id);
+}
+
+async function sincronizarRestaurantesUsuario(client, userId, restauranteIds) {
+  await client.query('DELETE FROM usuario_restaurante_estoque WHERE usuario_id = $1', [userId]);
+  const ids = Array.isArray(restauranteIds)
+    ? [...new Set(restauranteIds.map((x) => parseInt(x, 10)).filter((x) => !Number.isNaN(x)))]
+    : [];
+  for (const rid of ids) {
+    const ex = await client.query('SELECT id FROM restaurantes WHERE id = $1 AND ativo = true', [rid]);
+    if (ex.rows.length === 0) continue;
+    await client.query(
+      `INSERT INTO usuario_restaurante_estoque (usuario_id, restaurante_id) VALUES ($1, $2)
+       ON CONFLICT (usuario_id, restaurante_id) DO NOTHING`,
+      [userId, rid]
+    );
+  }
+  return listarRestauranteIdsUsuario(userId, client);
+}
+
+router.get('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT u.id, u.username, u.nome, u.is_admin,
+        COALESCE(u.modulo_financeiro, false) AS modulo_financeiro,
+        COALESCE(u.modulo_estoque, false) AS modulo_estoque,
+        COALESCE(u.modulo_estoque_simplificado, false) AS modulo_estoque_simplificado,
+        COALESCE(u.modulo_boletos, false) AS modulo_boletos
+       FROM usuarios u
+       ORDER BY u.is_admin DESC, u.nome ASC`
+    );
+    const rows = [];
+    for (const row of result.rows) {
+      const flags = row.is_admin
+        ? {
+            ...row,
+            modulo_financeiro: true,
+            modulo_estoque: true,
+            modulo_estoque_simplificado: true,
+            modulo_boletos: true
+          }
+        : row;
+      const restaurante_ids = await listarRestauranteIdsUsuario(row.id);
+      rows.push({
+        id: flags.id,
+        username: flags.username,
+        nome: flags.nome,
+        is_admin: !!flags.is_admin,
+        modulo_financeiro: !!flags.modulo_financeiro,
+        modulo_estoque: !!flags.modulo_estoque,
+        modulo_estoque_simplificado: !!flags.modulo_estoque_simplificado,
+        modulo_boletos: !!flags.modulo_boletos,
+        restaurante_ids
+      });
+    }
+    res.json(rows);
+  } catch (error) {
+    if (error.code === '42703') {
+      return res.status(503).json({ error: 'Migração de permissões pendente (013 ou 014).' });
+    }
+    console.error('Erro ao listar permissões:', error);
+    res.status(500).json({ error: 'Erro ao listar permissões de usuários' });
+  }
+});
+
+router.post('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const body = req.body || {};
+    const username = String(body.username || '').trim();
+    const password = String(body.password || '');
+    const nome = String(body.nome || '').trim();
+    if (!username) {
+      return res.status(400).json({ error: 'Login é obrigatório' });
+    }
+    if (password.length < 4) {
+      return res.status(400).json({ error: 'Senha é obrigatória (mín. 4 caracteres).' });
+    }
+    if (!nome) {
+      return res.status(400).json({ error: 'Nome é obrigatório' });
+    }
+
+    const moduloFinanceiro = body.modulo_financeiro === true;
+    const moduloEstoque = body.modulo_estoque === true;
+    const moduloEstoqueSimplificado = body.modulo_estoque_simplificado === true;
+    const moduloBoletos = body.modulo_boletos === true;
+    if (!moduloFinanceiro && !moduloEstoque && !moduloEstoqueSimplificado && !moduloBoletos) {
+      return res.status(400).json({ error: 'Marque ao menos um módulo para o usuário.' });
+    }
+
+    const restrito = true; // todo usuário não-admin precisa de restaurantes liberados
+    const restauranteIds = Array.isArray(body.restaurante_ids)
+      ? body.restaurante_ids.map((x) => parseInt(x, 10)).filter((x) => !Number.isNaN(x))
+      : [];
+    if (restrito && restauranteIds.length === 0) {
+      return res.status(400).json({
+        error: 'Usuário não-admin precisa de ao menos um restaurante liberado.'
+      });
+    }
+
+    const dup = await client.query('SELECT id FROM usuarios WHERE username = $1', [username]);
+    if (dup.rows.length > 0) {
+      return res.status(409).json({ error: 'Já existe usuário com este login.' });
+    }
+
+    const somenteEstoqueLegacy = !moduloFinanceiro && (moduloEstoque || moduloEstoqueSimplificado);
+    const hash = await bcrypt.hash(password, 10);
+    await client.query('BEGIN');
+    const ins = await client.query(
+      `INSERT INTO usuarios (
+         username, password, nome, is_admin, somente_estoque,
+         modulo_financeiro, modulo_estoque, modulo_estoque_simplificado, modulo_boletos
+       ) VALUES ($1, $2, $3, false, $4, $5, $6, $7, $8)
+       RETURNING id, username, nome`,
+      [
+        username,
+        hash,
+        nome,
+        somenteEstoqueLegacy,
+        moduloFinanceiro,
+        moduloEstoque,
+        moduloEstoqueSimplificado,
+        moduloBoletos
+      ]
+    );
+    const newUser = ins.rows[0];
+    let ids = [];
+    if (restrito) {
+      ids = await sincronizarRestaurantesUsuario(client, newUser.id, restauranteIds);
+      if (ids.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Nenhum dos restaurantes informados é válido ou está ativo.' });
+      }
+    }
+    await client.query('COMMIT');
+    res.status(201).json({
+      id: newUser.id,
+      username: newUser.username,
+      nome: newUser.nome,
+      is_admin: false,
+      modulo_financeiro: moduloFinanceiro,
+      modulo_estoque: moduloEstoque,
+      modulo_estoque_simplificado: moduloEstoqueSimplificado,
+      modulo_boletos: moduloBoletos,
+      restaurante_ids: ids
+    });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (error.code === '42703') {
+      return res.status(503).json({ error: 'Migração de permissões pendente (013 ou 014).' });
+    }
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Já existe usuário com este login.' });
+    }
+    console.error('Erro ao criar usuário:', error);
+    res.status(500).json({ error: 'Erro ao criar usuário' });
+  } finally {
+    client.release();
+  }
+});
+
+router.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (Number.isNaN(userId)) {
+      return res.status(400).json({ error: 'id inválido' });
+    }
+    const cur = await client.query('SELECT * FROM usuarios WHERE id = $1', [userId]);
+    if (cur.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+    const usuario = cur.rows[0];
+    if (usuario.is_admin) {
+      return res.status(400).json({ error: 'Permissões de administrador não podem ser alteradas.' });
+    }
+
+    const body = req.body || {};
+    const moduloFinanceiro = body.modulo_financeiro === true;
+    const moduloEstoque = body.modulo_estoque === true;
+    const moduloEstoqueSimplificado = body.modulo_estoque_simplificado === true;
+    const moduloBoletos = body.modulo_boletos === true;
+
+    if (!moduloFinanceiro && !moduloEstoque && !moduloEstoqueSimplificado && !moduloBoletos) {
+      return res.status(400).json({ error: 'Marque ao menos um módulo para o usuário.' });
+    }
+
+    const restrito = true; // todo usuário não-admin precisa de restaurantes liberados
+    let restauranteIds = [];
+    if (restrito) {
+      restauranteIds = Array.isArray(body.restaurante_ids)
+        ? body.restaurante_ids.map((x) => parseInt(x, 10)).filter((x) => !Number.isNaN(x))
+        : await listarRestauranteIdsUsuario(userId);
+      if (restauranteIds.length === 0) {
+        return res.status(400).json({
+          error: 'Usuário não-admin precisa de ao menos um restaurante liberado.'
+        });
+      }
+    }
+
+    const somenteEstoqueLegacy = !moduloFinanceiro && (moduloEstoque || moduloEstoqueSimplificado);
+
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE usuarios
+       SET modulo_financeiro = $1,
+           modulo_estoque = $2,
+           modulo_estoque_simplificado = $3,
+           modulo_boletos = $4,
+           somente_estoque = $5,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $6`,
+      [moduloFinanceiro, moduloEstoque, moduloEstoqueSimplificado, moduloBoletos, somenteEstoqueLegacy, userId]
+    );
+
+    if (restrito) {
+      restauranteIds = await sincronizarRestaurantesUsuario(client, userId, restauranteIds);
+    } else {
+      await client.query('DELETE FROM usuario_restaurante_estoque WHERE usuario_id = $1', [userId]);
+      restauranteIds = [];
+    }
+
+    await client.query('COMMIT');
+
+    res.json({
+      id: userId,
+      username: usuario.username,
+      nome: usuario.nome,
+      is_admin: false,
+      modulo_financeiro: moduloFinanceiro,
+      modulo_estoque: moduloEstoque,
+      modulo_estoque_simplificado: moduloEstoqueSimplificado,
+      modulo_boletos: moduloBoletos,
+      restaurante_ids: restauranteIds
+    });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (error.code === '42703') {
+      return res.status(503).json({ error: 'Migração de permissões pendente (013 ou 014).' });
+    }
+    console.error('Erro ao atualizar permissões:', error);
+    res.status(500).json({ error: 'Erro ao atualizar permissões' });
+  } finally {
+    client.release();
+  }
+});
+
+router.delete('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (Number.isNaN(userId)) {
+      return res.status(400).json({ error: 'id inválido' });
+    }
+    if (userId === req.user.id) {
+      return res.status(400).json({ error: 'Não é possível remover o próprio usuário.' });
+    }
+    const cur = await pool.query('SELECT id, is_admin FROM usuarios WHERE id = $1', [userId]);
+    if (cur.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+    if (cur.rows[0].is_admin) {
+      return res.status(400).json({ error: 'Não é possível remover um administrador.' });
+    }
+    await pool.query('DELETE FROM usuarios WHERE id = $1', [userId]);
+    res.json({ message: 'Usuário removido', id: userId });
+  } catch (error) {
+    if (error.code === '23503') {
+      return res.status(409).json({
+        error: 'Este usuário ainda está ligado a outros registros e não pode ser removido.'
+      });
+    }
+    console.error('Erro ao remover usuário:', error);
+    res.status(500).json({ error: 'Erro ao remover usuário' });
+  }
+});
+
+module.exports = router;
