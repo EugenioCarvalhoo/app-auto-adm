@@ -1,0 +1,125 @@
+name: CI e deploy
+
+# Roda os testes em todo push e pull request. O deploy no Easypanel só dispara se os testes passarem:
+#   - branch `homologacao` -> serviços de homologação
+#   - branch `main`        -> serviços de produção (com aprovação manual no ambiente "producao")
+# Pré-requisito: DESLIGAR o deploy automático por push no Easypanel (senão ele ignora este portão).
+on:
+  push:
+    branches: [main, homologacao]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Jest + Postgres real)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: controle_financeiro_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DB_HOST: 127.0.0.1
+      TEST_DB_PORT: 5432
+      TEST_DB_NAME: controle_financeiro_test
+      TEST_DB_USER: postgres
+      TEST_DB_PASSWORD: postgres
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx jest --ci
+
+  frontend:
+    name: Frontend (testes, tipos e build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx react-scripts test --watchAll=false
+        env:
+          CI: 'true'
+      # CI=false: o Dockerfile do Easypanel também builda sem CI. Com CI=true, os avisos de lint
+      # dos módulos legados (App.js, GridEditavel, Relatorios) viram erro. Remover esta linha de
+      # CI=false depois da limpeza dos módulos legados, para o lint voltar a ser rigoroso.
+      - run: npm run build
+        env:
+          CI: 'false'
+
+  # Garante que as imagens de produção continuam construindo (o que o Easypanel faz no deploy).
+  docker:
+    name: Build das imagens Docker
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t controle-api ./backend
+      - run: docker build -t controle-web ./frontend
+
+  deploy-homologacao:
+    name: Deploy em homologação
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/homologacao'
+    environment: homologacao
+    steps:
+      - name: Disparar deploy no Easypanel
+        env:
+          API_HOOK: ${{ secrets.EASYPANEL_HML_API_WEBHOOK }}
+          WEB_HOOK: ${{ secrets.EASYPANEL_HML_WEB_WEBHOOK }}
+        run: |
+          for nome in API_HOOK WEB_HOOK; do
+            url="${!nome}"
+            if [ -z "$url" ]; then echo "Secret do webhook $nome ausente"; exit 1; fi
+            curl --fail --silent --show-error -X POST "$url"
+            echo "Deploy disparado: $nome"
+          done
+
+  deploy-producao:
+    name: Deploy em produção
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Configure em Settings > Environments > producao: "Required reviewers" para exigir aprovação manual.
+    environment: producao
+    steps:
+      - name: Disparar deploy no Easypanel
+        env:
+          API_HOOK: ${{ secrets.EASYPANEL_PROD_API_WEBHOOK }}
+          WEB_HOOK: ${{ secrets.EASYPANEL_PROD_WEB_WEBHOOK }}
+        run: |
+          for nome in API_HOOK WEB_HOOK; do
+            url="${!nome}"
+            if [ -z "$url" ]; then echo "Secret do webhook $nome ausente"; exit 1; fi
+            curl --fail --silent --show-error -X POST "$url"
+            echo "Deploy disparado: $nome"
+          done
