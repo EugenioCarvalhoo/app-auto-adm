@@ -473,13 +473,15 @@ function App() {
                 >
                   Relatórios
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setTelaAtual('restaurantes')}
-                  className={telaAtual === 'restaurantes' ? 'nav-tab active' : 'nav-tab'}
-                >
-                  Restaurantes
-                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setTelaAtual('restaurantes')}
+                    className={telaAtual === 'restaurantes' ? 'nav-tab active' : 'nav-tab'}
+                  >
+                    Restaurantes
+                  </button>
+                )}
               </>
             )}
             {isAdmin && (
@@ -671,7 +673,7 @@ function App() {
           <Relatorios restauranteId={restauranteSelecionado} />
         ) : telaAtual === 'permissoes' && isAdmin ? (
           <AdminPermissoesUsuarios onError={(msg) => setError(msg)} />
-        ) : telaAtual === 'restaurantes' && acessoFinanceiro ? (
+        ) : telaAtual === 'restaurantes' && isAdmin ? (
           <CadastroRestaurantes onUpdate={handleRestaurantesUpdated} />
         ) : (
           <div className="empty-state">

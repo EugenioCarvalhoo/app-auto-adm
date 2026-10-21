@@ -118,14 +118,10 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
     await salvarUsuario(novo);
   };
 
-  const precisaRestaurantes = (u: UsuarioPermissaoRow) =>
-    !u.is_admin &&
-    !u.modulo_financeiro &&
-    (u.modulo_estoque || u.modulo_estoque_simplificado || u.modulo_boletos);
+  // Todo usuário não-admin precisa de restaurantes liberados pelo admin.
+  const precisaRestaurantes = (u: UsuarioPermissaoRow) => !u.is_admin;
 
-  const novoPrecisaRestaurante =
-    !novo.modulo_financeiro &&
-    (novo.modulo_estoque || novo.modulo_estoque_simplificado || novo.modulo_boletos);
+  const novoPrecisaRestaurante = true;
 
   const alternarModuloNovo = (campo: ModuloKey) => {
     setNovo((atual) => ({ ...atual, [campo]: !atual[campo] }));
@@ -152,7 +148,7 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
       return;
     }
     if (novoPrecisaRestaurante && novo.restaurante_ids.length === 0) {
-      setBanner({ type: 'err', text: 'Marque ao menos um restaurante para quem não tem o financeiro.' });
+      setBanner({ type: 'err', text: 'Marque ao menos um restaurante para o usuário.' });
       return;
     }
     setCriando(true);
@@ -200,8 +196,8 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
     <div className="admin-perm">
       <h1 className="admin-perm-title">Usuários e permissões</h1>
       <p className="admin-perm-hint">
-        Cadastre o login e marque os módulos, inclusive boletos e notas. Quem não tem o financeiro e usa estoque ou
-        boletos precisa de restaurantes liberados.
+        Cadastre o login e marque os módulos, inclusive boletos e notas. Todo usuário que não é administrador só
+        acessa os restaurantes liberados aqui.
       </p>
 
       {banner && (

@@ -167,12 +167,9 @@ async function shapeUserForClient(userRow) {
   };
 }
 
+/** Regra de negócio: só o admin enxerga todos os restaurantes; os demais, apenas os vinculados. */
 function usuarioRestaurantesRestritos(flags) {
-  return (
-    !flags.is_admin &&
-    !flags.modulo_financeiro &&
-    (flags.modulo_estoque || flags.modulo_estoque_simplificado || flags.modulo_boletos)
-  );
+  return !!flags && !flags.is_admin;
 }
 
 async function restauranteIdsUsuarioEstoque(userId) {
@@ -191,7 +188,7 @@ async function usuarioSomenteEstoquePodeRestaurante(userId, restauranteId) {
   return r.rows.length > 0;
 }
 
-/** Admin e usuários financeiros: qualquer restaurante. Somente estoque: só vinculados. */
+/** Admin: qualquer restaurante. Demais usuários: só os vinculados pelo admin. */
 async function assertEstoqueAcessoRestaurante(req, res, restauranteId) {
   const rid = parseInt(restauranteId, 10);
   if (Number.isNaN(rid)) {
@@ -203,7 +200,7 @@ async function assertEstoqueAcessoRestaurante(req, res, restauranteId) {
     res.status(403).json({ error: 'Usuário inválido.' });
     return false;
   }
-  if (flags.is_admin || flags.modulo_financeiro) {
+  if (flags.is_admin) {
     return true;
   }
   if (flags.modulo_estoque || flags.modulo_estoque_simplificado) {
@@ -233,7 +230,7 @@ async function assertBoletosAcessoRestaurante(req, res, restauranteId) {
     res.status(403).json({ error: 'Sem permissão para o módulo de boletos e notas.' });
     return false;
   }
-  if (flags.is_admin || flags.modulo_financeiro) return true;
+  if (flags.is_admin) return true;
   const ok = await usuarioSomenteEstoquePodeRestaurante(req.user.id, rid);
   if (!ok) {
     res.status(403).json({ error: 'Sem permissão para os boletos deste restaurante.' });
@@ -585,7 +582,7 @@ app.get('/api/restaurantes/:id', authenticateToken, async (req, res) => {
 });
 
 // Create restaurant
-app.post('/api/restaurantes', authenticateToken, requireFinanceiroAccess, async (req, res) => {
+app.post('/api/restaurantes', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { nome, endereco, telefone, email, cnpj, observacoes } = req.body;
     
@@ -605,7 +602,7 @@ app.post('/api/restaurantes', authenticateToken, requireFinanceiroAccess, async 
 });
 
 // Update restaurant
-app.put('/api/restaurantes/:id', authenticateToken, requireFinanceiroAccess, async (req, res) => {
+app.put('/api/restaurantes/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { nome, endereco, telefone, email, cnpj, observacoes, ativo } = req.body;
@@ -629,7 +626,7 @@ app.put('/api/restaurantes/:id', authenticateToken, requireFinanceiroAccess, asy
 });
 
 // Delete restaurant (soft delete - marca como inativo)
-app.delete('/api/restaurantes/:id', authenticateToken, requireFinanceiroAccess, async (req, res) => {
+app.delete('/api/restaurantes/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
@@ -2415,13 +2412,13 @@ app.post('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, asyn
       return res.status(400).json({ error: 'Marque ao menos um módulo para o usuário.' });
     }
 
-    const restrito = !moduloFinanceiro && (moduloEstoque || moduloEstoqueSimplificado || moduloBoletos);
+    const restrito = true; // todo usuário não-admin precisa de restaurantes liberados
     const restauranteIds = Array.isArray(body.restaurante_ids)
       ? body.restaurante_ids.map((x) => parseInt(x, 10)).filter((x) => !Number.isNaN(x))
       : [];
     if (restrito && restauranteIds.length === 0) {
       return res.status(400).json({
-        error: 'Usuário sem módulo financeiro precisa de ao menos um restaurante liberado.'
+        error: 'Usuário não-admin precisa de ao menos um restaurante liberado.'
       });
     }
 
@@ -2512,7 +2509,7 @@ app.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin, a
       return res.status(400).json({ error: 'Marque ao menos um módulo para o usuário.' });
     }
 
-    const restrito = !moduloFinanceiro && (moduloEstoque || moduloEstoqueSimplificado || moduloBoletos);
+    const restrito = true; // todo usuário não-admin precisa de restaurantes liberados
     let restauranteIds = [];
     if (restrito) {
       restauranteIds = Array.isArray(body.restaurante_ids)
@@ -2520,7 +2517,7 @@ app.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin, a
         : await listarRestauranteIdsUsuario(userId);
       if (restauranteIds.length === 0) {
         return res.status(400).json({
-          error: 'Usuário sem módulo financeiro precisa de ao menos um restaurante liberado.'
+          error: 'Usuário não-admin precisa de ao menos um restaurante liberado.'
         });
       }
     }

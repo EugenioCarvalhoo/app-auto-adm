@@ -33,11 +33,9 @@ export function usuarioTemAlgumModulo(user) {
   return p.financeiro || p.estoque || p.estoqueSimplificado || p.boletos;
 }
 
-/** Restaurantes restritos (usuário sem módulo financeiro). */
+/** Restaurantes restritos: todo usuário não-admin só vê os restaurantes liberados pelo admin. */
 export function usuarioRestaurantesRestritos(user) {
-  if (!user || user.is_admin) return false;
-  const p = permissoesUsuario(user);
-  return !p.financeiro && (p.estoque || p.estoqueSimplificado || p.boletos);
+  return !!user && !user.is_admin;
 }
 
 export function telaInicialUsuario(user) {
