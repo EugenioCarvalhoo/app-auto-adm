@@ -37,9 +37,6 @@ router.get('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, as
   try {
     const result = await pool.query(
       `SELECT u.id, u.username, u.nome, u.is_admin,
-        COALESCE(u.modulo_financeiro, false) AS modulo_financeiro,
-        COALESCE(u.modulo_estoque, false) AS modulo_estoque,
-        COALESCE(u.modulo_estoque_simplificado, false) AS modulo_estoque_simplificado,
         COALESCE(u.modulo_boletos, false) AS modulo_boletos
        FROM usuarios u
        ORDER BY u.is_admin DESC, u.nome ASC`
@@ -47,13 +44,7 @@ router.get('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, as
     const rows = [];
     for (const row of result.rows) {
       const flags = row.is_admin
-        ? {
-            ...row,
-            modulo_financeiro: true,
-            modulo_estoque: true,
-            modulo_estoque_simplificado: true,
-            modulo_boletos: true
-          }
+        ? { ...row, modulo_boletos: true }
         : row;
       const restaurante_ids = await listarRestauranteIdsUsuario(row.id);
       rows.push({
@@ -61,9 +52,6 @@ router.get('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, as
         username: flags.username,
         nome: flags.nome,
         is_admin: !!flags.is_admin,
-        modulo_financeiro: !!flags.modulo_financeiro,
-        modulo_estoque: !!flags.modulo_estoque,
-        modulo_estoque_simplificado: !!flags.modulo_estoque_simplificado,
         modulo_boletos: !!flags.modulo_boletos,
         restaurante_ids
       });
@@ -71,7 +59,7 @@ router.get('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, as
     res.json(rows);
   } catch (error) {
     if (error.code === '42703') {
-      return res.status(503).json({ error: 'Migração de permissões pendente (013 ou 014).' });
+      return res.status(503).json({ error: 'Migração de permissões pendente (014).' });
     }
     console.error('Erro ao listar permissões:', error);
     res.status(500).json({ error: 'Erro ao listar permissões de usuários' });
@@ -95,11 +83,8 @@ router.post('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, a
       return res.status(400).json({ error: 'Nome é obrigatório' });
     }
 
-    const moduloFinanceiro = body.modulo_financeiro === true;
-    const moduloEstoque = body.modulo_estoque === true;
-    const moduloEstoqueSimplificado = body.modulo_estoque_simplificado === true;
     const moduloBoletos = body.modulo_boletos === true;
-    if (!moduloFinanceiro && !moduloEstoque && !moduloEstoqueSimplificado && !moduloBoletos) {
+    if (!moduloBoletos) {
       return res.status(400).json({ error: 'Marque ao menos um módulo para o usuário.' });
     }
 
@@ -118,25 +103,13 @@ router.post('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, a
       return res.status(409).json({ error: 'Já existe usuário com este login.' });
     }
 
-    const somenteEstoqueLegacy = !moduloFinanceiro && (moduloEstoque || moduloEstoqueSimplificado);
     const hash = await bcrypt.hash(password, 10);
     await client.query('BEGIN');
     const ins = await client.query(
-      `INSERT INTO usuarios (
-         username, password, nome, is_admin, somente_estoque,
-         modulo_financeiro, modulo_estoque, modulo_estoque_simplificado, modulo_boletos
-       ) VALUES ($1, $2, $3, false, $4, $5, $6, $7, $8)
+      `INSERT INTO usuarios (username, password, nome, is_admin, modulo_boletos)
+       VALUES ($1, $2, $3, false, $4)
        RETURNING id, username, nome`,
-      [
-        username,
-        hash,
-        nome,
-        somenteEstoqueLegacy,
-        moduloFinanceiro,
-        moduloEstoque,
-        moduloEstoqueSimplificado,
-        moduloBoletos
-      ]
+      [username, hash, nome, moduloBoletos]
     );
     const newUser = ins.rows[0];
     let ids = [];
@@ -153,16 +126,13 @@ router.post('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, a
       username: newUser.username,
       nome: newUser.nome,
       is_admin: false,
-      modulo_financeiro: moduloFinanceiro,
-      modulo_estoque: moduloEstoque,
-      modulo_estoque_simplificado: moduloEstoqueSimplificado,
       modulo_boletos: moduloBoletos,
       restaurante_ids: ids
     });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     if (error.code === '42703') {
-      return res.status(503).json({ error: 'Migração de permissões pendente (013 ou 014).' });
+      return res.status(503).json({ error: 'Migração de permissões pendente (014).' });
     }
     if (error.code === '23505') {
       return res.status(409).json({ error: 'Já existe usuário com este login.' });
@@ -191,14 +161,11 @@ router.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin
     }
 
     const body = req.body || {};
-    const moduloFinanceiro = body.modulo_financeiro === true;
-    const moduloEstoque = body.modulo_estoque === true;
-    const moduloEstoqueSimplificado = body.modulo_estoque_simplificado === true;
-    const moduloBoletos = body.modulo_boletos === true;
-
-    if (!moduloFinanceiro && !moduloEstoque && !moduloEstoqueSimplificado && !moduloBoletos) {
-      return res.status(400).json({ error: 'Marque ao menos um módulo para o usuário.' });
+    // Revogar o módulo é válido (false), mas omitir o campo não pode revogar sem querer.
+    if (typeof body.modulo_boletos !== 'boolean') {
+      return res.status(400).json({ error: 'Informe modulo_boletos (true ou false).' });
     }
+    const moduloBoletos = body.modulo_boletos;
 
     const restrito = true; // todo usuário não-admin precisa de restaurantes liberados
     let restauranteIds = [];
@@ -213,19 +180,13 @@ router.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin
       }
     }
 
-    const somenteEstoqueLegacy = !moduloFinanceiro && (moduloEstoque || moduloEstoqueSimplificado);
-
     await client.query('BEGIN');
     await client.query(
       `UPDATE usuarios
-       SET modulo_financeiro = $1,
-           modulo_estoque = $2,
-           modulo_estoque_simplificado = $3,
-           modulo_boletos = $4,
-           somente_estoque = $5,
+       SET modulo_boletos = $1,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $6`,
-      [moduloFinanceiro, moduloEstoque, moduloEstoqueSimplificado, moduloBoletos, somenteEstoqueLegacy, userId]
+       WHERE id = $2`,
+      [moduloBoletos, userId]
     );
 
     if (restrito) {
@@ -242,16 +203,13 @@ router.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin
       username: usuario.username,
       nome: usuario.nome,
       is_admin: false,
-      modulo_financeiro: moduloFinanceiro,
-      modulo_estoque: moduloEstoque,
-      modulo_estoque_simplificado: moduloEstoqueSimplificado,
       modulo_boletos: moduloBoletos,
       restaurante_ids: restauranteIds
     });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     if (error.code === '42703') {
-      return res.status(503).json({ error: 'Migração de permissões pendente (013 ou 014).' });
+      return res.status(503).json({ error: 'Migração de permissões pendente (014).' });
     }
     console.error('Erro ao atualizar permissões:', error);
     res.status(500).json({ error: 'Erro ao atualizar permissões' });

@@ -57,7 +57,7 @@ describe('permissões de usuários', () => {
 
     it('admin aparece com todos os módulos', async () => {
       const res = await request(env.app).get(ROTA).set(auth(U.admin)).expect(200);
-      expect(res.body.find((u) => u.is_admin)).toMatchObject({ modulo_boletos: true, modulo_financeiro: true });
+      expect(res.body.find((u) => u.is_admin)).toMatchObject({ modulo_boletos: true });
     });
   });
 
@@ -76,8 +76,8 @@ describe('permissões de usuários', () => {
       expect((await env.um("SELECT is_admin FROM usuarios WHERE username = 'novo'")).is_admin).toBe(false);
     });
 
-    it('exige restaurante liberado mesmo para quem tem o antigo modulo_financeiro', async () => {
-      await request(env.app).post(ROTA).set(auth(U.admin)).send(novoUsuario({ modulo_financeiro: true, restaurante_ids: [] })).expect(400);
+    it('exige restaurante liberado para todo usuário não-admin', async () => {
+      await request(env.app).post(ROTA).set(auth(U.admin)).send(novoUsuario({ restaurante_ids: [] })).expect(400);
     });
 
     it('exige ao menos um módulo, login, senha (>= 4) e nome', async () => {
@@ -130,7 +130,7 @@ describe('permissões de usuários', () => {
     });
 
     it('admin revoga o módulo de boletos e o acesso cai na hora', async () => {
-      await request(env.app).put(`${ROTA}/2`).set(auth(U.admin)).send({ modulo_financeiro: true, restaurante_ids: [1] }).expect(200);
+      await request(env.app).put(`${ROTA}/2`).set(auth(U.admin)).send({ modulo_boletos: false, restaurante_ids: [1] }).expect(200);
       await request(env.app).get('/api/boletos?restaurante_id=1').set(auth(U.gerenteA)).expect(403);
     });
 
@@ -144,8 +144,9 @@ describe('permissões de usuários', () => {
       expect(await vinculosDe(2)).toEqual([1]);
     });
 
-    it('exige ao menos um módulo', async () => {
+    it('exige modulo_boletos explícito (omitir não revoga sem querer)', async () => {
       await request(env.app).put(`${ROTA}/2`).set(auth(U.admin)).send({ restaurante_ids: [1] }).expect(400);
+      expect((await env.um('SELECT modulo_boletos FROM usuarios WHERE id = 2')).modulo_boletos).toBe(true);
     });
 
     it('não altera permissões de administrador; 404 e 400 nos casos inválidos', async () => {

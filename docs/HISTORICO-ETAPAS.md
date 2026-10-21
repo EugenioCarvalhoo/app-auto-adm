@@ -78,6 +78,14 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
 - Antes de publicar: rodar `npm run migrate` em homologação **junto** com o deploy do código novo (o código antigo não encontra o nome novo, e vice-versa).
 - Pendente (precisa de confirmação do dono): `DROP TABLE gastos` e `estoque_*`; `DROP COLUMN` de `modulo_financeiro`, `modulo_estoque`, `modulo_estoque_simplificado`, `somente_estoque`; e remover as flags legadas do código e da tela de Usuários.
 
+### Fase 4 — DROP do legado (21/10/2026, autorizado pelo dono)
+- Migration `017_remove_legado_gastos_estoque.sql`: `DROP` de `estoque_movimentos`, `estoque_lancamentos_diarios`, `estoque_produtos`, `estoque_categorias`, da função do trigger de estoque e de `gastos`; `DROP COLUMN` de `modulo_financeiro`, `modulo_estoque`, `modulo_estoque_simplificado` e `somente_estoque` em `usuarios`. Sem `CASCADE`. **Faça `pg_dump` antes de aplicar em homologação/produção.**
+- Código sem as flags legadas: `loadUserFlags` virou uma consulta só; login/verify devolvem `{ id, username, nome, is_admin, modulo_boletos, restaurante_ids }`; a tela de Usuários mostra apenas "Boletos e notas".
+- Mudança de contrato: `PUT /api/admin/usuarios-permissoes/:id` agora exige `modulo_boletos` booleano e aceita `false` (revoga o acesso); antes, o corpo sem módulos marcados dava 400. `POST` continua exigindo boletos marcado.
+- Quem só tinha estoque fica sem módulo após a 017 (não vê nada) até o admin liberar boletos; quem tinha `modulo_financeiro` já tinha ganhado boletos (014) e vínculos (015).
+- Testes: 119 Jest (a 015 roda recriando a coluna `modulo_financeiro` só dentro do próprio bloco de teste), 11 front, 39 E2E. Build do front com `CI=true` ok.
+- Sobras fora do código (Fase 6): `MODULO_ESTOQUE.md`, `Manual_modulo_estoque_cliente.html`, `backend/database/exemplo_usuario_estoque.sql` e `init.sql` ainda falam de estoque/gastos.
+
 ### Homologação (banco `financialmanagementbdhomolog`)
 - Migration executada: `001` a `015` aplicadas; segunda execução pulou todas.
 - Antes: 1 usuário (admin), 2 restaurantes, 6 boletos. A `015` não alterou vínculos (só havia o admin).
@@ -96,7 +104,7 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
 1. Commit em branch (ex.: `regra-acesso-admin`) com a regra, a `015`, o `migrate.js`, os testes e os docs.
 2. ~~Fase 2~~ **feita (21/10/2026)**: remover o front legado (`GridEditavel`, `Relatorios`, `components/estoque/`, `Estoque.css`, `AdminUsuariosEstoque`), simplificar `App.js`, `AdminDashboard.tsx` e `userPermissoes.js`.
 3. ~~Fase 3~~ **feita (21/10/2026)**: remover do `server.js` as rotas `/api/gastos*`, `/api/estoque*`, `/api/admin/usuarios-estoque*` e seus helpers; dividir o que sobrar em módulos.
-4. Fase 4 (**parcial, 21/10/2026**): migration `016` já renomeia `usuario_restaurante_estoque` para `usuario_restaurantes` (código, testes e E2E atualizados). **Falta** o `DROP` das tabelas e colunas legadas, que depende de confirmação e de validar a 016 em homologação. Plano original: nova migration para renomear `usuario_restaurante_estoque` para `usuario_restaurantes` e, só depois de validar, `DROP` das tabelas e colunas legadas. Confirmar antes de qualquer `DROP`.
+4. ~~Fase 4~~ **feita (21/10/2026)**: 016 (rename) e 017 (DROP). Histórico do rename:: migration `016` já renomeia `usuario_restaurante_estoque` para `usuario_restaurantes` (código, testes e E2E atualizados). **Falta** o `DROP` das tabelas e colunas legadas, que depende de confirmação e de validar a 016 em homologação. Plano original: nova migration para renomear `usuario_restaurante_estoque` para `usuario_restaurantes` e, só depois de validar, `DROP` das tabelas e colunas legadas. Confirmar antes de qualquer `DROP`.
 5. Fase 5: `JWT_SECRET` obrigatório em produção (falhar se ausente), reduzir logs de login, baixar o limite de `express.json` (hoje 50mb), rate limit no login.
 6. Opcional: lacunas conhecidas — seletor para trocar de restaurante durante o uso (só confirmei a escolha inicial) e testes de tela / E2E com Playwright e Postgres real.
 

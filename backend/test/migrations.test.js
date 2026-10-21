@@ -1,5 +1,5 @@
 /**
- * Migrations no Postgres real: schema completo (001–016 aplicadas pelo globalSetup via migrate.js),
+ * Migrations no Postgres real: schema completo (001–017 aplicadas pelo globalSetup via migrate.js),
  * regra de vínculo da 015 e idempotência do migrate.
  */
 const fs = require('fs');
@@ -38,7 +38,7 @@ describe('migrations (Postgres real)', () => {
     const cols = (await pool.query(
       `SELECT column_name FROM information_schema.columns WHERE table_name = 'usuarios'`
     )).rows.map((r) => r.column_name);
-    expect(cols).toEqual(expect.arrayContaining(['is_admin', 'modulo_boletos', 'modulo_financeiro']));
+    expect(cols).toEqual(expect.arrayContaining(['is_admin', 'modulo_boletos']));
   });
 
   it('todas as migrations do migrate.js ficaram registradas em schema_migrations', async () => {
@@ -57,9 +57,24 @@ describe('migrations (Postgres real)', () => {
     expect(idx).toEqual(expect.arrayContaining(['usuario_restaurantes_pkey', 'idx_usuario_restaurantes_usuario']));
   });
 
+  it('017: gastos, estoque e as flags legadas foram removidos', async () => {
+    const tabelas = (await pool.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`)).rows.map((r) => r.table_name);
+    expect(tabelas.filter((t) => t === 'gastos' || t.startsWith('estoque_'))).toEqual([]);
+    const cols = (await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'usuarios'`)).rows.map((r) => r.column_name);
+    for (const legada of ['modulo_financeiro', 'modulo_estoque', 'modulo_estoque_simplificado', 'somente_estoque']) {
+      expect(cols).not.toContain(legada);
+    }
+    expect(cols).toEqual(expect.arrayContaining(['is_admin', 'modulo_boletos']));
+  });
+
   describe('015: vínculo de quem tinha acesso livre (modulo_financeiro)', () => {
+    // A 017 removeu a coluna; para exercitar a regra da 015 recriamos a coluna só dentro deste bloco.
+    beforeAll(() => pool.query('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS modulo_financeiro BOOLEAN NOT NULL DEFAULT false'));
+    afterAll(() => pool.query('ALTER TABLE usuarios DROP COLUMN IF EXISTS modulo_financeiro'));
+
     beforeEach(async () => {
       await semear(pool, cenarioPadrao());
+      await pool.query('UPDATE usuarios SET modulo_financeiro = true WHERE id = 6');
       await pool.query('DELETE FROM usuario_restaurantes');
     });
 

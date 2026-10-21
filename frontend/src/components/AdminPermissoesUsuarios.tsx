@@ -13,14 +13,11 @@ export interface UsuarioPermissaoRow {
   username: string;
   nome: string;
   is_admin: boolean;
-  modulo_financeiro: boolean;
-  modulo_estoque: boolean;
-  modulo_estoque_simplificado: boolean;
   modulo_boletos: boolean;
   restaurante_ids: number[];
 }
 
-type ModuloKey = 'modulo_financeiro' | 'modulo_estoque' | 'modulo_estoque_simplificado' | 'modulo_boletos';
+type ModuloKey = 'modulo_boletos';
 
 interface Props {
   onError?: (msg: string | null) => void;
@@ -30,9 +27,6 @@ const NOVO_VAZIO = {
   username: '',
   password: '',
   nome: '',
-  modulo_financeiro: false,
-  modulo_estoque: false,
-  modulo_estoque_simplificado: false,
   modulo_boletos: false,
   restaurante_ids: [] as number[]
 };
@@ -82,9 +76,6 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
       const { data } = await axios.put<UsuarioPermissaoRow>(
         `${API_URL}/admin/usuarios-permissoes/${usuario.id}`,
         {
-          modulo_financeiro: usuario.modulo_financeiro,
-          modulo_estoque: usuario.modulo_estoque,
-          modulo_estoque_simplificado: usuario.modulo_estoque_simplificado,
           modulo_boletos: usuario.modulo_boletos,
           restaurante_ids: usuario.restaurante_ids
         }
@@ -138,12 +129,7 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
 
   const criarUsuario = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (
-      !novo.modulo_financeiro &&
-      !novo.modulo_estoque &&
-      !novo.modulo_estoque_simplificado &&
-      !novo.modulo_boletos
-    ) {
+    if (!novo.modulo_boletos) {
       setBanner({ type: 'err', text: 'Marque ao menos um módulo para o usuário.' });
       return;
     }
@@ -158,9 +144,6 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
         username: novo.username.trim(),
         password: novo.password,
         nome: novo.nome.trim(),
-        modulo_financeiro: novo.modulo_financeiro,
-        modulo_estoque: novo.modulo_estoque,
-        modulo_estoque_simplificado: novo.modulo_estoque_simplificado,
         modulo_boletos: novo.modulo_boletos,
         restaurante_ids: novoPrecisaRestaurante ? novo.restaurante_ids : []
       });
@@ -196,7 +179,7 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
     <div className="admin-perm">
       <h1 className="admin-perm-title">Usuários e permissões</h1>
       <p className="admin-perm-hint">
-        Cadastre o login e marque os módulos, inclusive boletos e notas. Todo usuário que não é administrador só
+        Cadastre o login e libere o módulo de boletos e notas. Todo usuário que não é administrador só
         acessa os restaurantes liberados aqui.
       </p>
 
@@ -248,36 +231,6 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
               <label>
                 <input
                   type="checkbox"
-                  checked={novo.modulo_financeiro}
-                  onChange={() => alternarModuloNovo('modulo_financeiro')}
-                />
-                <span>Financeiro</span>
-              </label>
-            </li>
-            <li>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={novo.modulo_estoque}
-                  onChange={() => alternarModuloNovo('modulo_estoque')}
-                />
-                <span>Estoque</span>
-              </label>
-            </li>
-            <li>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={novo.modulo_estoque_simplificado}
-                  onChange={() => alternarModuloNovo('modulo_estoque_simplificado')}
-                />
-                <span>Estoque simplificado</span>
-              </label>
-            </li>
-            <li>
-              <label>
-                <input
-                  type="checkbox"
                   checked={novo.modulo_boletos}
                   onChange={() => alternarModuloNovo('modulo_boletos')}
                 />
@@ -324,9 +277,6 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
             <thead>
               <tr>
                 <th>Usuário</th>
-                <th className="admin-perm-th-check">Financeiro</th>
-                <th className="admin-perm-th-check">Estoque</th>
-                <th className="admin-perm-th-check">Estoque simplificado</th>
                 <th className="admin-perm-th-check">Boletos e notas</th>
                 <th className="admin-perm-th-acao">Ações</th>
               </tr>
@@ -342,36 +292,6 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
                         {u.is_admin ? ' · administrador' : ''}
                         {savingId === u.id ? ' · salvando…' : ''}
                       </div>
-                    </td>
-                    <td className="admin-perm-td-check">
-                      <label className="admin-perm-check">
-                        <input
-                          type="checkbox"
-                          checked={u.is_admin || u.modulo_financeiro}
-                          disabled={u.is_admin || savingId === u.id}
-                          onChange={() => toggleModulo(u, 'modulo_financeiro')}
-                        />
-                      </label>
-                    </td>
-                    <td className="admin-perm-td-check">
-                      <label className="admin-perm-check">
-                        <input
-                          type="checkbox"
-                          checked={u.is_admin || u.modulo_estoque}
-                          disabled={u.is_admin || savingId === u.id}
-                          onChange={() => toggleModulo(u, 'modulo_estoque')}
-                        />
-                      </label>
-                    </td>
-                    <td className="admin-perm-td-check">
-                      <label className="admin-perm-check">
-                        <input
-                          type="checkbox"
-                          checked={u.is_admin || u.modulo_estoque_simplificado}
-                          disabled={u.is_admin || savingId === u.id}
-                          onChange={() => toggleModulo(u, 'modulo_estoque_simplificado')}
-                        />
-                      </label>
                     </td>
                     <td className="admin-perm-td-check">
                       <label className="admin-perm-check">
@@ -398,7 +318,7 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
                   </tr>
                   {precisaRestaurantes(u) && (
                     <tr className="admin-perm-rest-row">
-                      <td colSpan={6}>
+                      <td colSpan={3}>
                         <fieldset className="admin-perm-rest-fieldset">
                           <legend className="admin-perm-rest-legend">Restaurantes liberados</legend>
                           {restaurantes.length === 0 ? (

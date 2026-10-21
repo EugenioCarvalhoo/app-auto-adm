@@ -20,13 +20,13 @@ describe('permissoesUsuario', () => {
   });
 
   it('usuário comum com boletos desligado não tem boletos', () => {
-    expect(permissoesUsuario({ is_admin: false, modulo_boletos: false, modulo_financeiro: true }).boletos).toBe(false);
+    expect(permissoesUsuario({ is_admin: false, modulo_boletos: false }).boletos).toBe(false);
   });
 });
 
 describe('usuarioTemAlgumModulo', () => {
   it('false sem nenhum módulo; true com boletos', () => {
-    expect(usuarioTemAlgumModulo({ is_admin: false, modulo_boletos: false, modulo_financeiro: false })).toBe(false);
+    expect(usuarioTemAlgumModulo({ is_admin: false, modulo_boletos: false })).toBe(false);
     expect(usuarioTemAlgumModulo({ is_admin: false, modulo_boletos: true })).toBe(true);
   });
 });
@@ -36,9 +36,8 @@ describe('usuarioRestaurantesRestritos (regra: só o admin vê todos)', () => {
     expect(usuarioRestaurantesRestritos({ is_admin: true })).toBe(false);
   });
 
-  it('usuário comum é sempre restrito, inclusive com o antigo modulo_financeiro', () => {
+  it('usuário comum é sempre restrito', () => {
     expect(usuarioRestaurantesRestritos({ is_admin: false, modulo_boletos: true })).toBe(true);
-    expect(usuarioRestaurantesRestritos({ is_admin: false, modulo_financeiro: true })).toBe(true);
   });
 
   it('sem usuário: false', () => {

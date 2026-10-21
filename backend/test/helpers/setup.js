@@ -22,8 +22,8 @@ function cenarioPadrao() {
     { ...base, id: 3, username: 'gerenteB', is_admin: false, modulo_boletos: true },
     { ...base, id: 4, username: 'semModulo', is_admin: false, modulo_boletos: false },
     { ...base, id: 5, username: 'semVinculo', is_admin: false, modulo_boletos: true },
-    // legado: tinha acesso livre pelo antigo modulo_financeiro; agora só vê o restaurante vinculado
-    { ...base, id: 6, username: 'financeiroLegado', is_admin: false, modulo_financeiro: true, modulo_boletos: true }
+    // legado: tinha acesso livre pelo antigo modulo_financeiro (já removido); só vê o restaurante vinculado
+    { ...base, id: 6, username: 'financeiroLegado', is_admin: false, modulo_boletos: true }
   ];
   const restaurantes = [
     { id: 1, nome: 'Restaurante A', ativo: true },
@@ -52,10 +52,9 @@ async function semear(pool, c = cenarioPadrao()) {
   await pool.query('TRUNCATE usuarios, restaurantes RESTART IDENTITY CASCADE');
   for (const u of c.usuarios) {
     await pool.query(
-      `INSERT INTO usuarios (id, username, password, nome, is_admin, somente_estoque,
-         modulo_financeiro, modulo_estoque, modulo_estoque_simplificado, modulo_boletos)
-       VALUES ($1, $2, $3, $4, $5, false, $6, false, false, $7)`,
-      [u.id, u.username, u.password, u.nome, !!u.is_admin, !!u.modulo_financeiro, !!u.modulo_boletos]
+      `INSERT INTO usuarios (id, username, password, nome, is_admin, modulo_boletos)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [u.id, u.username, u.password, u.nome, !!u.is_admin, !!u.modulo_boletos]
     );
   }
   for (const r of c.restaurantes) {

@@ -48,11 +48,7 @@ async function loginHandler(req, res) {
         id: user.id,
         username: user.username,
         is_admin: shaped.is_admin,
-        modulo_financeiro: shaped.modulo_financeiro,
-        modulo_estoque: shaped.modulo_estoque,
-        modulo_estoque_simplificado: shaped.modulo_estoque_simplificado,
-        modulo_boletos: shaped.modulo_boletos,
-        somente_estoque: shaped.somente_estoque
+        modulo_boletos: shaped.modulo_boletos
       },
       JWT_SECRET,
       { expiresIn: '24h' }
