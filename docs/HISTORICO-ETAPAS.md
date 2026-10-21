@@ -69,7 +69,7 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
 - Esses dois boletos de teste e o usuário `Test` continuam em homologação.
 
 ## 4. Estado atual e pendências
-- **Nada foi commitado.** Todas as mudanças estão no disco. Antes de trocar de ambiente, faça commit (ou garanta que o WSL abre a mesma pasta, ex.: `/mnt/c/IT/prd/controle-financeiro`).
+- **Commits feitos na branch `feat/regra-acesso-admin`** (6 commits: regra de acesso, migration 015, correções de validação, testes, CI e docs), ainda **sem push** e sem merge na `main`. Ficaram de fora, de propósito: a alteração do usuário em `frontend/package.json` (script `start` sem `cross-env`) e a pasta `.vscode/` vazia.
 - `frontend/package.json` tem alteração sua não commitada: o script `start` perdeu o `cross-env HOST=0.0.0.0`. No WSL/Linux, `start:unix` ou `HOST=0.0.0.0 react-scripts start` resolve; decida qual manter.
 - **Deploy do código novo em homologação ainda não confirmado.** A migration já está no banco; a regra só vale com o back e o front novos publicados. (O teste manual com o `Test` funcionou; confirme que foi com o código novo.)
 - O `Dockerfile` do back só roda `node server.js`: a migration não roda sozinha no deploy. Executar `npm run migrate` manualmente nos ambientes (produção ainda não foi migrada).
