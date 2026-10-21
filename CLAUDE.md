@@ -57,7 +57,7 @@ Back em `:5000`, front em `:3000`. Variáveis em `backend/.env` (modelo: `backen
 | `backend-api` | rotas, middlewares, regra de acesso | `backend/{routes,middleware,lib,db.js,server.js}` |
 | `database-migrations` | schema, migrations (DROP só com confirmação) | `backend/database/` |
 | `frontend-ui` | telas, componentes, axios | `frontend/src` |
-| `qa-tests` | Jest, Playwright, testes do front; reporta bugs sem corrigir produção | `backend/test`, `e2e/`, `*.test.js` |
+| `qa-tests` | **todos os testes**: unitários e de integração do back (Jest), front, Playwright; reporta bugs sem corrigir produção | `backend/test`, `e2e/`, `*.test.js` |
 | `security-reviewer` | auditoria somente-leitura (IDOR, auth, segredos) | nada |
 | `devops-docs` | CI, Docker, deploy, documentação | `.github/`, Dockerfiles, `docs/`, `CLAUDE.md` |
 

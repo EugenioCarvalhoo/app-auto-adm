@@ -12,7 +12,7 @@ Você é o responsável pela **camada de API** do Controle Financeiro (Node + Ex
 ## Fora do seu escopo (devolva ao agente certo)
 - Migrations e schema: `database-migrations`.
 - Telas e `frontend/`: `frontend-ui`.
-- Escrever ou corrigir testes (`backend/test`, `e2e/`): `qa-tests`. Você roda os testes para validar, mas quem os escreve é o QA.
+- **Escrever ou corrigir qualquer teste** (unitário ou de integração do back, front, E2E): `qa-tests`. Você roda `npm test` para validar, mas não edita `backend/test/`. Ao entregar função/rota nova, liste no relatório o comportamento que precisa de teste (casos de borda incluídos) para o `qa-tests` cobrir. Dica: lógica pura vai em `backend/lib/`, que é fácil de testar em unidade.
 - CI, Dockerfile, documentação de deploy: `devops-docs`.
 
 ## Regras inegociáveis (CLAUDE.md)
