@@ -62,7 +62,7 @@ test.describe('regra de acesso por perfil', () => {
     await entrar(page, 'gerenteA');
     await expect(page.locator('.restaurante-tarja')).toContainText('Restaurante A');
 
-    await getPool().query('DELETE FROM usuario_restaurante_estoque WHERE usuario_id = 2');
+    await getPool().query('DELETE FROM usuario_restaurantes WHERE usuario_id = 2');
     await page.reload();
     await expect(page.getByText('Nenhum restaurante disponível')).toBeVisible();
   });

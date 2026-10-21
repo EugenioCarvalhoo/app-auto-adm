@@ -1,5 +1,5 @@
 /**
- * Migrations no Postgres real: schema completo (001–015 aplicadas pelo globalSetup via migrate.js),
+ * Migrations no Postgres real: schema completo (001–016 aplicadas pelo globalSetup via migrate.js),
  * regra de vínculo da 015 e idempotência do migrate.
  */
 const fs = require('fs');
@@ -9,16 +9,16 @@ const { Pool } = require('pg');
 const { dbConfig } = require('./helpers/dbConfig');
 const { semear, cenarioPadrao } = require('./helpers/setup');
 
-const MIGRATION_015 = fs.readFileSync(
-  path.join(__dirname, '..', 'database', 'migrations', '015_vinculo_restaurantes_regra_admin.sql'),
-  'utf8'
-);
+// A 015 foi escrita com o nome antigo da tabela (a 016 a renomeou); aqui ela roda contra o nome atual.
+const MIGRATION_015 = fs
+  .readFileSync(path.join(__dirname, '..', 'database', 'migrations', '015_vinculo_restaurantes_regra_admin.sql'), 'utf8')
+  .replace(/usuario_restaurante_estoque/g, 'usuario_restaurantes');
 
 describe('migrations (Postgres real)', () => {
   let pool;
   const cfg = dbConfig();
   const vinculos = async () =>
-    (await pool.query('SELECT usuario_id, restaurante_id FROM usuario_restaurante_estoque ORDER BY 1, 2')).rows.map(
+    (await pool.query('SELECT usuario_id, restaurante_id FROM usuario_restaurantes ORDER BY 1, 2')).rows.map(
       (r) => `${r.usuario_id}:${r.restaurante_id}`
     );
 
@@ -33,7 +33,7 @@ describe('migrations (Postgres real)', () => {
     );
     const tabelas = rows.map((r) => r.table_name);
     expect(tabelas).toEqual(
-      expect.arrayContaining(['usuarios', 'restaurantes', 'usuario_restaurante_estoque', 'boletos_notas', 'boletos_metas_gasto', 'schema_migrations'])
+      expect.arrayContaining(['usuarios', 'restaurantes', 'usuario_restaurantes', 'boletos_notas', 'boletos_metas_gasto', 'schema_migrations'])
     );
     const cols = (await pool.query(
       `SELECT column_name FROM information_schema.columns WHERE table_name = 'usuarios'`
@@ -49,10 +49,18 @@ describe('migrations (Postgres real)', () => {
     expect(rows).toHaveLength(arquivos.length);
   });
 
+  it('016: a tabela antiga foi renomeada, com dados e índices', async () => {
+    const tabelas = (await pool.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`)).rows.map((r) => r.table_name);
+    expect(tabelas).toContain('usuario_restaurantes');
+    expect(tabelas).not.toContain('usuario_restaurante_estoque');
+    const idx = (await pool.query(`SELECT indexname FROM pg_indexes WHERE tablename = 'usuario_restaurantes'`)).rows.map((r) => r.indexname);
+    expect(idx).toEqual(expect.arrayContaining(['usuario_restaurantes_pkey', 'idx_usuario_restaurantes_usuario']));
+  });
+
   describe('015: vínculo de quem tinha acesso livre (modulo_financeiro)', () => {
     beforeEach(async () => {
       await semear(pool, cenarioPadrao());
-      await pool.query('DELETE FROM usuario_restaurante_estoque');
+      await pool.query('DELETE FROM usuario_restaurantes');
     });
 
     it('vincula usuário comum com modulo_financeiro a todos os restaurantes ATIVOS', async () => {
@@ -78,7 +86,7 @@ describe('migrations (Postgres real)', () => {
     });
 
     it('preserva vínculos já existentes do usuário', async () => {
-      await pool.query('INSERT INTO usuario_restaurante_estoque (usuario_id, restaurante_id) VALUES (6, 1)');
+      await pool.query('INSERT INTO usuario_restaurantes (usuario_id, restaurante_id) VALUES (6, 1)');
       await pool.query(MIGRATION_015);
       expect((await vinculos()).filter((x) => x.startsWith('6:')).sort()).toEqual(['6:1', '6:2']);
     });
@@ -87,7 +95,7 @@ describe('migrations (Postgres real)', () => {
   describe('migrate.js', () => {
     it('numa segunda execução, pula tudo e NÃO reaplica a 015 (não recria vínculos removidos pelo admin)', async () => {
       await semear(pool, cenarioPadrao());
-      await pool.query('DELETE FROM usuario_restaurante_estoque');
+      await pool.query('DELETE FROM usuario_restaurantes');
 
       const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'database', 'migrate.js')], {
         env: {

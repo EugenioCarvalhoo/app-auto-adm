@@ -62,7 +62,7 @@ async function semear(pool, c = cenarioPadrao()) {
     await pool.query('INSERT INTO restaurantes (id, nome, ativo) VALUES ($1, $2, $3)', [r.id, r.nome, r.ativo]);
   }
   for (const v of c.vinculos) {
-    await pool.query('INSERT INTO usuario_restaurante_estoque (usuario_id, restaurante_id) VALUES ($1, $2)', [
+    await pool.query('INSERT INTO usuario_restaurantes (usuario_id, restaurante_id) VALUES ($1, $2)', [
       v.usuario_id,
       v.restaurante_id
     ]);

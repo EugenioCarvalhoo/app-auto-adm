@@ -25,7 +25,7 @@ Back em `:5000`, front em `:3000`. Variáveis em `backend/.env` (modelo: `backen
 - `backend/middleware/auth.js` — `authenticateToken` (valida JWT). `backend/middleware/permissoes.js` — `loadUserFlags`, `requireAdmin`, `requireModuloBoletos`, `assertBoletosAcessoRestaurante`, `usuarioRestaurantesRestritos`.
 - `backend/lib/boletos.js` — helpers de boleto (valor, datas, enriquecimento).
 - `backend/lib/boletosSemana.js` — semana sábado–sexta, vencimento efetivo, tipo (testado em `backend/test/boletosSemana.test.js`).
-- `backend/database/migrations/` — `002` usuarios, `003_create_restaurantes`, `007` vínculo usuário↔restaurante, `013` flags de módulo, `014` boletos.
+- `backend/database/migrations/` — `002` usuarios, `003_create_restaurantes`, `007` vínculo usuário↔restaurante, `013` flags de módulo, `014` boletos, `015` vínculos da regra nova, `016` rename do vínculo.
 - `frontend/src/components/boletos/BoletosModulo.tsx|css` — tela de boletos, resumo semanal, metas.
 - `frontend/src/lib/boletosSemana.ts`, `frontend/src/lib/userPermissoes.js`.
 - `frontend/src/components/Login.js`, `AdminPermissoesUsuarios.tsx`, `CadastroRestaurantes.js`, `App.js`, `config.js`.
@@ -38,7 +38,7 @@ Back em `:5000`, front em `:3000`. Variáveis em `backend/.env` (modelo: `backen
 ## Modelo de autorização (importante)
 - `usuarios`: `is_admin` + flags `modulo_boletos` (e legadas `modulo_financeiro`, `modulo_estoque*`, `somente_estoque`).
 - Admin acessa tudo. Demais usuários dependem de `modulo_boletos`.
-- Separação por restaurante: tabela **`usuario_restaurante_estoque`** (nome legado; vincula usuário↔restaurante). Checada por `assertBoletosAcessoRestaurante` e `usuarioRestaurantesRestritos` em `middleware/permissoes.js`.
+- Separação por restaurante: tabela **`usuario_restaurantes`** (renomeada da `usuario_restaurante_estoque` na migration 016; vincula usuário↔restaurante). Checada por `assertBoletosAcessoRestaurante` e `usuarioRestaurantesRestritos` em `middleware/permissoes.js`.
 - **Flags são lidas do banco a cada requisição** (`loadUserFlags`), não confie só no JWT.
 - Toda rota que recebe `:id` de boleto/meta deve buscar o registro e validar o `restaurante_id` dele (padrão já usado em PUT/DELETE de boletos). Mantenha esse padrão em rotas novas.
 

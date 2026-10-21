@@ -15,7 +15,7 @@ const novoUsuario = (extra = {}) => ({
   ...extra
 });
 const vinculosDe = async (uid) =>
-  (await env.rows('SELECT restaurante_id FROM usuario_restaurante_estoque WHERE usuario_id = $1 ORDER BY 1', [uid])).map(
+  (await env.rows('SELECT restaurante_id FROM usuario_restaurantes WHERE usuario_id = $1 ORDER BY 1', [uid])).map(
     (r) => r.restaurante_id
   );
 

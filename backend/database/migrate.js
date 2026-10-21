@@ -35,7 +35,8 @@ async function migrate() {
       '012_estoque_lancamentos_diarios.sql',
       '013_usuario_modulos_permissao.sql',
       '014_boletos_notas.sql',
-      '015_vinculo_restaurantes_regra_admin.sql'
+      '015_vinculo_restaurantes_regra_admin.sql',
+      '016_renomeia_vinculo_usuario_restaurantes.sql'
     ];
 
     // Registro das migrations já aplicadas: evita reexecutar as que não são repetíveis

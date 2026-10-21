@@ -35,7 +35,7 @@ test.describe('administração (admin)', () => {
 
     const [u] = await rows("SELECT id, modulo_boletos FROM usuarios WHERE username = 'novo.usuario'");
     expect(u.modulo_boletos).toBe(true);
-    const vinculos = await rows('SELECT restaurante_id FROM usuario_restaurante_estoque WHERE usuario_id = $1', [u.id]);
+    const vinculos = await rows('SELECT restaurante_id FROM usuario_restaurantes WHERE usuario_id = $1', [u.id]);
     expect(vinculos.map((v) => v.restaurante_id)).toEqual([2]);
 
     // outro navegador (outra sessão): o novo usuário só vê o restaurante B

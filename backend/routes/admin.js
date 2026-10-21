@@ -10,14 +10,14 @@ const router = express.Router();
 
 async function listarRestauranteIdsUsuario(userId, db = pool) {
   const assoc = await db.query(
-    'SELECT restaurante_id FROM usuario_restaurante_estoque WHERE usuario_id = $1 ORDER BY restaurante_id',
+    'SELECT restaurante_id FROM usuario_restaurantes WHERE usuario_id = $1 ORDER BY restaurante_id',
     [userId]
   );
   return assoc.rows.map((row) => row.restaurante_id);
 }
 
 async function sincronizarRestaurantesUsuario(client, userId, restauranteIds) {
-  await client.query('DELETE FROM usuario_restaurante_estoque WHERE usuario_id = $1', [userId]);
+  await client.query('DELETE FROM usuario_restaurantes WHERE usuario_id = $1', [userId]);
   const ids = Array.isArray(restauranteIds)
     ? [...new Set(restauranteIds.map((x) => parseInt(x, 10)).filter((x) => !Number.isNaN(x)))]
     : [];
@@ -25,7 +25,7 @@ async function sincronizarRestaurantesUsuario(client, userId, restauranteIds) {
     const ex = await client.query('SELECT id FROM restaurantes WHERE id = $1 AND ativo = true', [rid]);
     if (ex.rows.length === 0) continue;
     await client.query(
-      `INSERT INTO usuario_restaurante_estoque (usuario_id, restaurante_id) VALUES ($1, $2)
+      `INSERT INTO usuario_restaurantes (usuario_id, restaurante_id) VALUES ($1, $2)
        ON CONFLICT (usuario_id, restaurante_id) DO NOTHING`,
       [userId, rid]
     );
@@ -231,7 +231,7 @@ router.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin
     if (restrito) {
       restauranteIds = await sincronizarRestaurantesUsuario(client, userId, restauranteIds);
     } else {
-      await client.query('DELETE FROM usuario_restaurante_estoque WHERE usuario_id = $1', [userId]);
+      await client.query('DELETE FROM usuario_restaurantes WHERE usuario_id = $1', [userId]);
       restauranteIds = [];
     }
 

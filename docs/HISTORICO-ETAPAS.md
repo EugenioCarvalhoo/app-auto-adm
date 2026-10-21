@@ -73,6 +73,11 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
 - Dividido em `db.js`, `middleware/permissoes.js`, `lib/boletos.js` e `routes/{auth,restaurantes,boletos,admin,health}.js` (cada router mantém o caminho completo `/api/...` e monta na raiz). Comportamento idêntico: 117 testes Jest e 39 E2E passando.
 - Ainda no back, de propósito (Fase 4): flags legadas `modulo_financeiro`, `modulo_estoque*`, `somente_estoque` em `loadUserFlags`, no login e nas rotas de permissões; tabela `usuario_restaurante_estoque`. Saem junto com a migration `016`.
 
+### Fase 4 parcial — rename do vínculo (21/10/2026)
+- Migration `016_renomeia_vinculo_usuario_restaurantes.sql`: só renomeia a tabela e seus índices (idempotente, sem perda de dados). Nenhum `DROP`.
+- Antes de publicar: rodar `npm run migrate` em homologação **junto** com o deploy do código novo (o código antigo não encontra o nome novo, e vice-versa).
+- Pendente (precisa de confirmação do dono): `DROP TABLE gastos` e `estoque_*`; `DROP COLUMN` de `modulo_financeiro`, `modulo_estoque`, `modulo_estoque_simplificado`, `somente_estoque`; e remover as flags legadas do código e da tela de Usuários.
+
 ### Homologação (banco `financialmanagementbdhomolog`)
 - Migration executada: `001` a `015` aplicadas; segunda execução pulou todas.
 - Antes: 1 usuário (admin), 2 restaurantes, 6 boletos. A `015` não alterou vínculos (só havia o admin).
@@ -91,7 +96,7 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
 1. Commit em branch (ex.: `regra-acesso-admin`) com a regra, a `015`, o `migrate.js`, os testes e os docs.
 2. ~~Fase 2~~ **feita (21/10/2026)**: remover o front legado (`GridEditavel`, `Relatorios`, `components/estoque/`, `Estoque.css`, `AdminUsuariosEstoque`), simplificar `App.js`, `AdminDashboard.tsx` e `userPermissoes.js`.
 3. ~~Fase 3~~ **feita (21/10/2026)**: remover do `server.js` as rotas `/api/gastos*`, `/api/estoque*`, `/api/admin/usuarios-estoque*` e seus helpers; dividir o que sobrar em módulos.
-4. Fase 4: nova migration (ex.: `016`) para renomear `usuario_restaurante_estoque` para `usuario_restaurantes` e, só depois de validar, `DROP` das tabelas e colunas legadas. Confirmar antes de qualquer `DROP`.
+4. Fase 4 (**parcial, 21/10/2026**): migration `016` já renomeia `usuario_restaurante_estoque` para `usuario_restaurantes` (código, testes e E2E atualizados). **Falta** o `DROP` das tabelas e colunas legadas, que depende de confirmação e de validar a 016 em homologação. Plano original: nova migration para renomear `usuario_restaurante_estoque` para `usuario_restaurantes` e, só depois de validar, `DROP` das tabelas e colunas legadas. Confirmar antes de qualquer `DROP`.
 5. Fase 5: `JWT_SECRET` obrigatório em produção (falhar se ausente), reduzir logs de login, baixar o limite de `express.json` (hoje 50mb), rate limit no login.
 6. Opcional: lacunas conhecidas — seletor para trocar de restaurante durante o uso (só confirmei a escolha inicial) e testes de tela / E2E com Playwright e Postgres real.
 

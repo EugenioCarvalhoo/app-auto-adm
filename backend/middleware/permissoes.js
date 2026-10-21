@@ -117,7 +117,7 @@ function usuarioRestaurantesRestritos(flags) {
 
 async function restauranteIdsUsuarioEstoque(userId) {
   const r = await pool.query(
-    'SELECT restaurante_id FROM usuario_restaurante_estoque WHERE usuario_id = $1 ORDER BY restaurante_id',
+    'SELECT restaurante_id FROM usuario_restaurantes WHERE usuario_id = $1 ORDER BY restaurante_id',
     [userId]
   );
   return r.rows.map((row) => row.restaurante_id);
@@ -125,7 +125,7 @@ async function restauranteIdsUsuarioEstoque(userId) {
 
 async function usuarioPodeRestaurante(userId, restauranteId) {
   const r = await pool.query(
-    'SELECT 1 FROM usuario_restaurante_estoque WHERE usuario_id = $1 AND restaurante_id = $2',
+    'SELECT 1 FROM usuario_restaurantes WHERE usuario_id = $1 AND restaurante_id = $2',
     [userId, restauranteId]
   );
   return r.rows.length > 0;

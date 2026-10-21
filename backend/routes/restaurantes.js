@@ -23,7 +23,7 @@ router.get('/api/restaurantes', authenticateToken, async (req, res) => {
       const result = await pool.query(
         `SELECT r.*
          FROM restaurantes r
-         INNER JOIN usuario_restaurante_estoque ur ON ur.restaurante_id = r.id AND ur.usuario_id = $1
+         INNER JOIN usuario_restaurantes ur ON ur.restaurante_id = r.id AND ur.usuario_id = $1
          WHERE r.ativo = true
          ORDER BY r.nome ASC`,
         [req.user.id]

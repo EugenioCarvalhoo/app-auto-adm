@@ -43,7 +43,7 @@ describe('restaurantes', () => {
     });
 
     it('restaurante inativo não aparece nem para quem está vinculado a ele', async () => {
-      await env.rows('INSERT INTO usuario_restaurante_estoque (usuario_id, restaurante_id) VALUES (2, 3)');
+      await env.rows('INSERT INTO usuario_restaurantes (usuario_id, restaurante_id) VALUES (2, 3)');
       const res = await request(env.app).get('/api/restaurantes').set(auth(U.gerenteA)).expect(200);
       expect(res.body.map((r) => r.id)).toEqual([1]);
     });
