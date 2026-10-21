@@ -2834,6 +2834,9 @@ app.get('/api/health/ready', healthWithDatabase);
 // Easypanel / probes antigos: mantém checagem com banco na raiz
 app.get('/health', healthWithDatabase);
 
+// Expõe o pool para os testes de integração encerrarem as conexões.
+app.locals.pool = pool;
+
 module.exports = app;
 
 // Só escuta porta quando o arquivo é executado diretamente (npm start / node server.js)

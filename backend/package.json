@@ -7,9 +7,10 @@
     "start": "node server.js",
     "migrate": "node database/migrate.js",
     "create-admin": "node database/create_admin.js",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test": "node scripts/test.js",
+    "test:watch": "node scripts/test.js --watch",
+    "test:coverage": "node scripts/test.js --coverage",
+    "test:jest": "jest"
   },
   "keywords": [],
   "author": "",
