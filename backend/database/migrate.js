@@ -34,16 +34,37 @@ async function migrate() {
       '011_estoque_produto_critica_foto.sql',
       '012_estoque_lancamentos_diarios.sql',
       '013_usuario_modulos_permissao.sql',
-      '014_boletos_notas.sql'
+      '014_boletos_notas.sql',
+      '015_vinculo_restaurantes_regra_admin.sql'
     ];
-    
+
+    // Registro das migrations já aplicadas: evita reexecutar as que não são repetíveis
+    // (ex.: a 015 revincularia usuários a restaurantes que o admin já removeu).
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        filename TEXT PRIMARY KEY,
+        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    const aplicadas = new Set(
+      (await pool.query('SELECT filename FROM schema_migrations')).rows.map((r) => r.filename)
+    );
+
     for (const migrationFile of migrations) {
+      if (aplicadas.has(migrationFile)) {
+        console.log(`- ${migrationFile} já aplicada, pulando`);
+        continue;
+      }
       console.log(`Executando migração: ${migrationFile}`);
       const migrationSQL = fs.readFileSync(
         path.join(__dirname, 'migrations', migrationFile),
         'utf8'
       );
       await pool.query(migrationSQL);
+      await pool.query(
+        'INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING',
+        [migrationFile]
+      );
       console.log(`✓ ${migrationFile} executada com sucesso`);
     }
     
