@@ -2,6 +2,7 @@ import express from 'express';
 import type { Request, Response } from 'express';
 import pool from '../db';
 import { mensagemErro } from '../lib/erros';
+import { migracoesPendentes } from '../lib/migracoes';
 
 const router = express.Router();
 
@@ -21,10 +22,23 @@ function apiHealthLiveness(req: Request, res: Response): void {
 async function healthWithDatabase(req: Request, res: Response): Promise<void> {
   try {
     await pool.query('SELECT 1');
+    const pendentes = await migracoesPendentes(pool);
+    if (pendentes.length > 0) {
+      res.status(503).json({
+        status: 'error',
+        check: 'ready',
+        database: 'connected',
+        migrations: 'pending',
+        pendentes,
+        error: `Migrations pendentes: ${pendentes.join(', ')}`
+      });
+      return;
+    }
     res.status(200).json({
       status: 'ok',
       check: 'ready',
       database: 'connected',
+      migrations: 'ok',
       timestamp: new Date().toISOString()
     });
   } catch (error) {

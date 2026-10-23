@@ -7,6 +7,13 @@ export function codigoErro(error: unknown): string | undefined {
   return undefined;
 }
 
+export const MSG_BANCO_DESATUALIZADO = 'Banco desatualizado: migrations pendentes. Veja /api/health/ready.';
+
+/** True para 42P01 (tabela/relação inexistente): sinal de migration pendente. */
+export function ehTabelaInexistente(error: unknown): boolean {
+  return codigoErro(error) === '42P01';
+}
+
 export function mensagemErro(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

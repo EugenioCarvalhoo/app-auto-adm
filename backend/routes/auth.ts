@@ -6,7 +6,7 @@ import pool from '../db';
 import { authenticateToken, JWT_SECRET } from '../middleware/auth';
 import { shapeUserForClient } from '../middleware/permissoes';
 import type { UsuarioRow } from '../middleware/permissoes';
-import { mensagemErro, stackErro } from '../lib/erros';
+import { mensagemErro, stackErro, ehTabelaInexistente, MSG_BANCO_DESATUALIZADO } from '../lib/erros';
 
 /** Linha completa de usuarios (SELECT *). */
 interface UsuarioCompleto extends UsuarioRow {
@@ -69,6 +69,9 @@ async function loginHandler(req: Request, res: Response): Promise<Response | voi
     });
   } catch (error) {
     console.error('Erro no login:', error);
+    if (ehTabelaInexistente(error)) {
+      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
+    }
     console.error('Stack trace:', stackErro(error));
     res.status(500).json({
       error: 'Erro ao fazer login',
@@ -94,6 +97,9 @@ router.get('/api/verify', authenticateToken, async (req, res) => {
     res.json({ user: shaped });
   } catch (error) {
     console.error('Erro ao verificar token:', error);
+    if (ehTabelaInexistente(error)) {
+      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
+    }
     res.status(500).json({ error: 'Erro ao verificar token' });
   }
 });

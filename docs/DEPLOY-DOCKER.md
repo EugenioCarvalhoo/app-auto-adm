@@ -66,6 +66,17 @@ O `docker-compose.yml` serve só para isso; o Easypanel não o usa.
 - A `017` faz `DROP` das tabelas de gastos e estoque e das flags legadas de `usuarios`. Faça `pg_dump` antes do primeiro deploy do código atual em cada ambiente.
 - O código novo usa a tabela `usuario_restaurantes` (migration `016`) e o antigo usa o nome velho: publique API e web juntos.
 
+## Ordem segura de deploy e diagnóstico (`/api/health/ready`)
+
+- **Ordem:** (1) `pg_dump` do banco; (2) publique a API nova, cujo `CMD` aplica as migrations pendentes antes de iniciar; (3) publique o web; (4) confira `GET /api/health/ready`.
+- **`GET /api/health/ready`** (também `/health`): 200 `{status:'ok', check:'ready', database:'connected', migrations:'ok', timestamp}`; 503 com `migrations:'pending'`, `pendentes:[...]` e `error:'Migrations pendentes: ...'` quando falta alguma; 503 com `database:'disconnected'` se o banco estiver inacessível.
+- **O `HEALTHCHECK` do Docker continua em `/api/health` (liveness) de propósito:** ele não consulta o banco. Se apontasse para o `ready`, migrations pendentes ou banco fora do ar fariam o Easypanel reiniciar a API em loop. Use o `ready` manualmente, ou em monitoramento externo.
+- **No boot** a API loga um erro destacado com as migrations pendentes e a instrução `node database/migrate.js (faça pg_dump antes)`. Ela **não** encerra o processo (evita loop de reinício) e **não** aplica migrations sozinha. Como o `CMD` já roda o `migrate.js`, essa checagem vale para execução local e para `RUN_MIGRATIONS=0`.
+- **Se aparecer "Banco desatualizado: migrations pendentes"** (503 em admin, restaurantes, `/api/verify` ou boletos; antes era um 500 genérico "relation ... does not exist"): consulte `/api/health/ready` para ver as pendentes, faça `pg_dump` e rode `node database/migrate.js` no terminal da API (ou redeploy com `RUN_MIGRATIONS` ligado).
+
+### Atenção: homologação e produção ainda não têm 016 e 017
+O código antigo ainda roda nos dois ambientes. O **primeiro deploy do código novo aplica a 016 (rename para `usuario_restaurantes`) e a 017 (`DROP` de gastos/estoque e flags legadas)**. Elas ainda **NÃO** foram aplicadas lá. Faça o `pg_dump` antes e publique API e web juntos.
+
 ## Verificado (23/10/2026)
 `docker compose up --build` (Docker 27 no WSL): as três imagens constroem; a API aplica as 17 migrations e sobe como `healthy`; `GET /api/health` e `/api/health/ready` respondem 200; o web responde 200 e devolve `index.html` em rotas desconhecidas (fallback de SPA); `POST /api/login` com credencial inválida devolve 401; `create_admin.js` roda dentro do container; `docker stop` encerra a API com graciosidade em cerca de 1 s. Não testado: login e fluxo de boletos pela interface, e o deploy real no Easypanel.
 

@@ -124,6 +124,21 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
 - Docs: `README.md`, `TESTING.md` e `setup.md` reescritos para o projeto atual (sem gastos/estoque); removido `backend/env.example` (duplicava `.env.example`, com senha de exemplo); aviso de "desatualizado" nos 9 guias `*_EASYPANEL.md` que citam `node server.js`.
 - Pendente: imagens base `node:18-alpine` e `nginx:alpine` com vulnerabilidades apontadas pelo IDE (Node 18 sem suporte); subir exige ajustar `@types/node`, o CI e testar o CRA.
 
+## 9. Verificação de migrations no boot e no health (23/10/2026)
+- **Problema:** o backend novo (tabela `usuario_restaurantes`, migration 016) rodou contra um banco ainda na 015 e a API devolveu 500 genérico "relation usuario_restaurantes does not exist" só na primeira requisição que tocava a tabela. Homologação e produção ainda estão em código antigo: 016 e 017 **não** foram aplicadas lá.
+- **Solução:**
+  - `backend/database/lista-migrations.js`: lista única e ordenada (`{ MIGRATIONS }`), usada por `migrate.js` e pela API. Migration nova precisa entrar aí.
+  - `backend/lib/migracoes.ts`: `migracoesPendentes(pool)` compara a lista com `schema_migrations`.
+  - `GET /api/health/ready` (e `/health`): 200 com `migrations:'ok'`; 503 com `migrations:'pending'` e `pendentes`; 503 `database:'disconnected'`. `GET /api/health` (liveness, usado no `HEALTHCHECK`) não mudou.
+  - No boot: log de erro com as pendentes e `node database/migrate.js (faça pg_dump antes)`; não encerra o processo nem aplica migrations.
+  - Tabela inexistente (`42P01`) em admin, restaurantes, auth/verify e boletos responde 503 `Banco desatualizado: migrations pendentes. Veja /api/health/ready.`
+- **Testes:** `test/upgrade.test.js` (banco isolado `controle_financeiro_upgrade_test`: estado 015 com dados, aplica 016+017, confere vínculos, índices, boletos/metas e idempotência), `test/healthMigrations.test.js` e `health.test.js` ajustado. Validado: typecheck, build e 147 testes.
+- **Pendências:**
+  - (a) `requireModuloBoletos` e `loadUserFlags` não têm try/catch: se o banco falhar ali, o Express 4 não captura a rejeição e a requisição pode pendurar (tarefa separada).
+  - (b) Só `GET /api/admin/usuarios-permissoes` tem teste do 503 de tabela inexistente; POST/PUT/DELETE de admin e as rotas de boletos não têm.
+  - (c) O teste de upgrade não semeia dados em gastos/estoque.
+  - Aplicar 016 e 017 em homologação/produção continua pendente (ver `docs/DEPLOY-DOCKER.md`).
+
 ## 7. Migração do backend para TypeScript (21/10/2026)
 - `server`, `db`, `routes/*`, `middleware/*`, `lib/*` agora são `.ts`; novos: `lib/tipos.ts`, `lib/erros.ts`, `lib/loadEnv.ts` e `backend/tsconfig.json` (`strict`, CommonJS, saída em `dist/`). `database/` e `scripts/` seguem em JS. Jest usa `ts-jest`.
 - Scripts do back: `dev` (nodemon + tsx), `build` (`tsc`), `typecheck` (`tsc --noEmit`), `start` (`node dist/server.js`), `start:prod` (`node database/migrate.js && node dist/server.js`).

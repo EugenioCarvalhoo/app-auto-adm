@@ -4,7 +4,7 @@ import type { Queryable } from '../lib/tipos';
 import pool from '../db';
 import { authenticateToken } from '../middleware/auth';
 import { requireAdmin } from '../middleware/permissoes';
-import { codigoErro } from '../lib/erros';
+import { codigoErro, ehTabelaInexistente, MSG_BANCO_DESATUALIZADO } from '../lib/erros';
 
 interface UsuarioPermissoesRow {
   id: number;
@@ -72,6 +72,9 @@ router.get('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, as
       return res.status(503).json({ error: 'Migração de permissões pendente (014).' });
     }
     console.error('Erro ao listar permissões:', error);
+    if (ehTabelaInexistente(error)) {
+      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
+    }
     res.status(500).json({ error: 'Erro ao listar permissões de usuários' });
   }
 });
@@ -148,6 +151,9 @@ router.post('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, a
       return res.status(409).json({ error: 'Já existe usuário com este login.' });
     }
     console.error('Erro ao criar usuário:', error);
+    if (ehTabelaInexistente(error)) {
+      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
+    }
     res.status(500).json({ error: 'Erro ao criar usuário' });
   } finally {
     client.release();
@@ -222,6 +228,9 @@ router.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin
       return res.status(503).json({ error: 'Migração de permissões pendente (014).' });
     }
     console.error('Erro ao atualizar permissões:', error);
+    if (ehTabelaInexistente(error)) {
+      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
+    }
     res.status(500).json({ error: 'Erro ao atualizar permissões' });
   } finally {
     client.release();
@@ -253,6 +262,9 @@ router.delete('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAd
       });
     }
     console.error('Erro ao remover usuário:', error);
+    if (ehTabelaInexistente(error)) {
+      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
+    }
     res.status(500).json({ error: 'Erro ao remover usuário' });
   }
 });
