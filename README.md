@@ -61,7 +61,7 @@ Veja [TESTING.md](./TESTING.md).
 │   ├── test/                # Jest + Supertest
 │   └── Dockerfile
 ├── frontend/
-│   ├── src/                 # App.js, components/ (boletos, login, admin), lib/
+│   ├── src/                 # App.tsx, components/ (boletos, login, admin), lib/
 │   ├── nginx.conf
 │   └── Dockerfile
 ├── e2e/                     # Playwright

@@ -10,44 +10,11 @@ import {
   parseValorBr,
   vencimentoEfetivo
 } from '../../lib/boletosSemana';
+import { mensagemErro } from '../../lib/erros';
+import type { Boleto, Meta, SemanaResumo, TipoDado } from '../../types';
 import './BoletosModulo.css';
 
 type Aba = 'resumo' | 'cadastro' | 'metas';
-type TipoDado = 'Boleto' | 'Sem Boleto';
-
-interface Boleto {
-  id: number;
-  restaurante_id: number;
-  dt_recebimento: string | null;
-  dt_vencimento: string | null;
-  descricao: string;
-  valor: number;
-  tipo: TipoDado;
-  dt_vencimento_efetivo: string | null;
-  semana_inicio: string | null;
-  semana_fim: string | null;
-  semana_chave: string | null;
-  created_at?: string | null;
-}
-
-interface SemanaResumo {
-  chave: string;
-  inicio: string;
-  fim: string;
-  total: number;
-  quantidade: number;
-  maximo: number | null;
-  saldo: number | null;
-}
-
-interface Meta {
-  id: number;
-  data_referencia: string;
-  semana_inicio: string;
-  semana_fim: string;
-  maximo_gasto: number;
-}
-
 interface Props {
   restauranteId: number;
   restauranteNome?: string;
@@ -85,11 +52,6 @@ function progressoMeta(gasto: number, meta: number | null): number | null {
 
 function textoPercentual(valor: number, casas = 1): string {
   return `${valor.toFixed(casas).replace('.', ',')}%`;
-}
-
-function mensagemErro(error: unknown, fallback: string): string {
-  const ax = error as { response?: { data?: { error?: string } } };
-  return ax.response?.data?.error || fallback;
 }
 
 const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simples = false, onMessage }) => {

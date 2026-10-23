@@ -62,6 +62,11 @@ npx jest                          # Jest puro (exige o Postgres já no ar)
 
 `health.test.js` e os testes de `lib/` não usam banco.
 
+**Limitações:**
+- Não rode duas execuções de `npm test` ao mesmo tempo no mesmo banco: o `globalSetup` recria o schema e as execuções disputam as tabelas (deadlocks).
+- `upgrade.test.js` cria e apaga bancos próprios terminados em `_upgrade_test` (`controle_financeiro_upgrade_test`); o usuário do Postgres precisa poder criar bancos.
+- No Windows, o container `pg-controle` pode ser derrubado pelo WSL ocioso. Se o Postgres sumir no meio do trabalho: `wsl -d Ubuntu -- docker start pg-controle`.
+
 ## Arquivos
 
 | Arquivo | Cobre |
@@ -71,3 +76,5 @@ npx jest                          # Jest puro (exige o Postgres já no ar)
 | `boletos.test.js` | CRUD, validações, isolamento entre restaurantes (IDOR), semana e metas |
 | `permissoes.test.js` | gestão de usuários só pelo admin, efeito imediato, transação |
 | `migrations.test.js` | schema, regra da 015 com dados reais, idempotência do migrate |
+| `upgrade.test.js` | banco isolado: estado 015 com dados, aplica 016+017 pelo `migrate.js`, confere vínculos, índices, boletos/metas e idempotência |
+| `healthMigrations.test.js` | `/api/health/ready`: 200 com migrations em dia, 503 com pendentes, 503 com banco inacessível |

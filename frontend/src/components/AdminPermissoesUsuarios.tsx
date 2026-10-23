@@ -1,21 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { API_URL } from '../config';
+import { mensagemErro } from '../lib/erros';
+import type { Restaurante as RestauranteApi, Usuario } from '../types';
 import './AdminPermissoesUsuarios.css';
 
-interface Restaurante {
-  id: number;
-  nome: string;
-}
+/** Só o necessário da lista de restaurantes nesta tela. */
+type Restaurante = Pick<RestauranteApi, 'id' | 'nome'>;
 
-export interface UsuarioPermissaoRow {
-  id: number;
-  username: string;
-  nome: string;
-  is_admin: boolean;
-  modulo_boletos: boolean;
-  restaurante_ids: number[];
-}
+export type UsuarioPermissaoRow = Usuario;
 
 type ModuloKey = 'modulo_boletos';
 
@@ -82,9 +75,8 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
       );
       atualizarLocal(usuario.id, data);
       setBanner({ type: 'ok', text: `Permissões de ${usuario.username} atualizadas.` });
-    } catch (e: unknown) {
-      const ax = e as { response?: { data?: { error?: string } } };
-      const msg = ax.response?.data?.error || 'Erro ao salvar permissões.';
+    } catch (e) {
+      const msg = mensagemErro(e, 'Erro ao salvar permissões.');
       setBanner({ type: 'err', text: msg });
       await carregar();
     } finally {
@@ -150,9 +142,8 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
       setNovo(NOVO_VAZIO);
       await carregar();
       setBanner({ type: 'ok', text: 'Usuário criado. Ele já pode entrar com o login e a senha definidos.' });
-    } catch (e: unknown) {
-      const ax = e as { response?: { data?: { error?: string } } };
-      setBanner({ type: 'err', text: ax.response?.data?.error || 'Erro ao criar usuário.' });
+    } catch (e) {
+      setBanner({ type: 'err', text: mensagemErro(e, 'Erro ao criar usuário.') });
     } finally {
       setCriando(false);
     }
@@ -167,9 +158,8 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
       await axios.delete(`${API_URL}/admin/usuarios-permissoes/${usuario.id}`);
       await carregar();
       setBanner({ type: 'ok', text: `Usuário ${usuario.username} removido.` });
-    } catch (e: unknown) {
-      const ax = e as { response?: { data?: { error?: string } } };
-      setBanner({ type: 'err', text: ax.response?.data?.error || 'Erro ao remover usuário.' });
+    } catch (e) {
+      setBanner({ type: 'err', text: mensagemErro(e, 'Erro ao remover usuário.') });
     } finally {
       setSavingId(null);
     }

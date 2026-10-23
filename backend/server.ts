@@ -8,6 +8,8 @@ import restaurantesRouter from './routes/restaurantes';
 import boletosRouter from './routes/boletos';
 import adminRouter from './routes/admin';
 import healthRouter from './routes/health';
+import { migracoesPendentes } from './lib/migracoes';
+import { mensagemErro } from './lib/erros';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
@@ -63,6 +65,27 @@ if (require.main === module) {
       console.log('[boot] Log de cada requisição HTTP ativo — defina LOG_HTTP=0 para desligar');
     }
   });
+
+  // Avisa (sem encerrar nem migrar) se o banco está desatualizado.
+  if (process.env.NODE_ENV !== 'test') {
+    pool
+      .query('SELECT 1')
+      .then(() => migracoesPendentes(pool))
+      .then((pendentes) => {
+        if (pendentes.length > 0) {
+          console.error('==================================================================');
+          console.error(`[boot] ATENCAO: ${pendentes.length} migration(s) pendente(s) no banco:`);
+          pendentes.forEach((m) => console.error(`[boot]   - ${m}`));
+          console.error('[boot] Rode: node database/migrate.js (faça pg_dump antes)');
+          console.error('==================================================================');
+        } else {
+          console.log('[boot] Migrations em dia.');
+        }
+      })
+      .catch((error) => {
+        console.error('[boot] Não foi possível verificar migrations:', mensagemErro(error));
+      });
+  }
 
   process.on('SIGTERM', () => {
     console.log('SIGTERM recebido, encerrando servidor graciosamente...');

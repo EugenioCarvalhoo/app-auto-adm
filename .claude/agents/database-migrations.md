@@ -14,7 +14,7 @@ Você é o responsável pela **camada de banco** (PostgreSQL, SQL direto, sem OR
 - Você não aplica migrations em homologação ou produção; entrega o arquivo e as instruções.
 
 ## Regras
-- **Nunca edite uma migration já existente/aplicada.** Mudança = nova migration com o próximo número (hoje a última é `017`) e inclusão na lista de `migrate.js` (que registra as aplicadas em `schema_migrations`).
+- **Nunca edite uma migration já existente/aplicada.** Mudança = nova migration com o próximo número (hoje a última é `017`) e inclusão em `backend/database/lista-migrations.js` (lista única usada por `migrate.js` e pela API; `migrate.js` registra as aplicadas em `schema_migrations`).
 - **Migration destrutiva (`DROP`, `TRUNCATE`, `DELETE` sem filtro, `DROP COLUMN`) só com confirmação explícita do usuário**, citada na resposta. Sem `CASCADE` salvo justificativa. Lembre de exigir `pg_dump` antes de aplicar.
 - Prefira idempotência (`IF EXISTS`, `IF NOT EXISTS`, blocos `DO $$`), para reexecução segura.
 - Valores monetários `NUMERIC(14,2)`; datas de boleto `DATE` (sem fuso). Chaves estrangeiras com `ON DELETE` pensado: separação por restaurante nunca pode ser contornada por registro órfão.

@@ -1,7 +1,7 @@
 // Configuração dinâmica da URL da API
 // Detecta automaticamente se está rodando em localhost ou em rede local
 
-function trimTrailingSlashes(url) {
+function trimTrailingSlashes(url: string | undefined): string {
   return String(url || '').replace(/\/+$/, '');
 }
 
@@ -11,7 +11,7 @@ function trimTrailingSlashes(url) {
  * Produção: …financialmanagement… (sem app) → …financialmanagementapp…
  * Quando REACT_APP_API_URL não entra no build do CRA, sem este mapeamento POST /api iria para o nginx do front (405).
  */
-function easypanelHostnameToApiHost(hostname) {
+function easypanelHostnameToApiHost(hostname: string): string {
   if (
     hostname.includes('financialmanagement') &&
     !hostname.includes('financialmanagementapp')
@@ -21,7 +21,7 @@ function easypanelHostnameToApiHost(hostname) {
   return hostname;
 }
 
-const getApiUrl = () => {
+const getApiUrl = (): string => {
   // Se está definido nas variáveis de ambiente, usa (sem barra final: evita .../api//login)
   if (process.env.REACT_APP_API_URL) {
     return trimTrailingSlashes(process.env.REACT_APP_API_URL);
