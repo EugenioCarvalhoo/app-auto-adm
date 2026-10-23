@@ -19,6 +19,7 @@ jest.mock('pg', () => ({
 }));
 
 const request = require('supertest');
+const { MIGRATIONS } = require('../database/lista-migrations');
 
 describe('GET /health', () => {
   let app;
@@ -33,13 +34,16 @@ describe('GET /health', () => {
   });
 
   it('retorna 200 quando o banco responde', async () => {
+    // 1ª consulta: SELECT 1; 2ª: schema_migrations (todas aplicadas)
     mockPoolQuery.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] });
+    mockPoolQuery.mockResolvedValueOnce({ rows: MIGRATIONS.map((filename) => ({ filename })) });
 
     const res = await request(app).get('/health').expect(200);
 
     expect(res.body).toMatchObject({
       status: 'ok',
       database: 'connected',
+      migrations: 'ok',
     });
     expect(res.body.timestamp).toBeDefined();
     expect(mockPoolQuery).toHaveBeenCalled();
