@@ -1,5 +1,7 @@
 # Plano de ação — enxugar o projeto para Boletos + Auth/Restaurantes
 
+> **Plano concluído** (fases 0–5: migrations 015–017, backend e frontend em TypeScript). Este arquivo é só histórico; o estado atual e as decisões estão em [HISTORICO-ETAPAS.md](./HISTORICO-ETAPAS.md).
+
 Escopo a manter: cadastro de boletos/notas e dashboard semanal (front e back); autenticação, autorização e separação por restaurante.
 
 ## 1. Diagnóstico

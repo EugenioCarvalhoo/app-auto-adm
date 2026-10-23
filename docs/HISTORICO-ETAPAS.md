@@ -159,3 +159,8 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
   - Tipos `Boleto`, `SemanaResumo` e `Meta` em `types.ts` ainda não foram conferidos linha a linha contra `backend/routes/boletos.ts`; o `qa-tests` está conferindo.
   - E2E (Playwright) está sendo rodado pelo `qa-tests`; resultado ainda não registrado aqui.
   - Faltam commit e validação do build do front (`CI=true npx react-scripts build`) após a migração.
+
+## 11. Reorganização da documentação (23/10/2026)
+- Removidos da raiz: `MODULO_ESTOQUE.md`, `Manual_modulo_estoque_cliente.html`, `ACESSO-CELULAR.md`, `limpar-cookies.html`, `VARIAVEIS_ENV_EXEMPLO.txt`, `setup.md` (fundido no `README.md`), `get-ip.js` e o script `get-ip` (só serviam ao ACESSO-CELULAR).
+- Guias históricos de deploy movidos para `docs/deploy/` (com README avisando que estão obsoletos); `HOMOLOGACAO.md` foi para `docs/`.
+- `docs/DEPLOY-DOCKER.md` ganhou a seção "Problemas comuns"; `docs/PLANO-DE-ACAO.md` marcado como concluído.

@@ -2,6 +2,8 @@
 
 O código é o **mesmo** entre produção e homologação. A separação é feita por **deploy** (outro serviço no Easypanel) e **variáveis de ambiente**, em especial o **banco de dados**.
 
+> **Build e portas:** o build usa o builder **Dockerfile** (ver [DEPLOY-DOCKER.md](./DEPLOY-DOCKER.md)), sem Comando de Início customizado. O domínio do proxy aponta para a porta **80** no web e **5000** na API.
+
 ## O que fazer no Easypanel
 
 1. **Duplicar o stack** (ou criar um segundo projeto) para homologação, por exemplo:

@@ -10,7 +10,6 @@
     "install-all": "npm install && cd frontend && npm install && cd ../e2e && npm install",
     "migrate": "node backend/database/migrate.js",
     "create-admin": "node backend/database/create_admin.js",
-    "get-ip": "node get-ip.js",
     "test:e2e": "cd e2e && npx playwright test"
   },
   "keywords": [],

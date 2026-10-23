@@ -1,6 +1,6 @@
 # Docker e deploy (Easypanel)
 
-Guia único e atual de containers. Os `*_EASYPANEL.md` da raiz são históricos de troubleshooting e citam comandos antigos (`node server.js`), que não existem mais.
+Guia único e atual de containers. Os guias em [`docs/deploy/`](./deploy/README.md) são históricos de troubleshooting e citam comandos antigos (`node server.js`), que não existem mais.
 
 ## Imagens
 
@@ -76,6 +76,12 @@ O `docker-compose.yml` serve só para isso; o Easypanel não o usa.
 
 ### Atenção: homologação e produção ainda não têm 016 e 017
 O código antigo ainda roda nos dois ambientes. O **primeiro deploy do código novo aplica a 016 (rename para `usuario_restaurantes`) e a 017 (`DROP` de gastos/estoque e flags legadas)**. Elas ainda **NÃO** foram aplicadas lá. Faça o `pg_dump` antes e publique API e web juntos.
+
+## Problemas comuns
+
+- **`Cannot find module '/app/server.js'`:** o Easypanel está com um comando de início antigo (override do `CMD`) ou com uma imagem antiga do tempo do builder Nixpacks. Apague o Comando de Início do serviço e use o builder **Dockerfile**. Se o serviço não reconstruir a imagem, recrie o serviço.
+- **"Erro de CORS" no navegador:** quase sempre é um 502 do proxy por porta errada no domínio (web **80**, API **5000**); o navegador mostra como CORS porque a resposta do proxy não traz os headers. A API usa `cors()` aberto e o token vai por header `Authorization`, então CORS em si raramente é a causa.
+- **`GET /api/health/ready` lista migrations pendentes (016/017):** a 017 faz `DROP` de gastos/estoque e flags legadas; faça `pg_dump` antes e rode `node database/migrate.js` (ou redeploy com `RUN_MIGRATIONS` ligado). Ver a seção de ordem segura de deploy abaixo.
 
 ## Verificado (23/10/2026)
 `docker compose up --build` (Docker 27 no WSL): as três imagens constroem; a API aplica as 17 migrations e sobe como `healthy`; `GET /api/health` e `/api/health/ready` respondem 200; o web responde 200 e devolve `index.html` em rotas desconhecidas (fallback de SPA); `POST /api/login` com credencial inválida devolve 401; `create_admin.js` roda dentro do container; `docker stop` encerra a API com graciosidade em cerca de 1 s. Não testado: login e fluxo de boletos pela interface, e o deploy real no Easypanel.
