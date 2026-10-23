@@ -11,7 +11,7 @@ COPY . .
 
 # O CRA embute REACT_APP_* no JS na hora do build; variável só no container em runtime não altera o bundle.
 # Informe a URL pública da API (com /api), ex.: https://api.exemplo.com/api
-# Sem ela, src/config.js deduz o host da API a partir do hostname (ver o arquivo).
+# Sem ela, src/config.ts deduz o host da API a partir do hostname (ver o arquivo).
 ARG REACT_APP_API_URL
 ENV REACT_APP_API_URL=$REACT_APP_API_URL
 
