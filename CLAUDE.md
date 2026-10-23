@@ -16,7 +16,7 @@ npm run create-admin         # cria usuário admin
 cd backend && npm run typecheck && npm run build   # tsc --noEmit / compila para dist/
 cd backend && npm start      # node dist/server.js (precisa do build)
 cd backend && npm run start:prod   # migrate + node dist/server.js (equivale ao CMD da imagem Docker)
-docker compose up --build    # db + api + web locais (precisa de JWT_SECRET); ver docs/DEPLOY-DOCKER.md
+docker compose up --build    # db + minio (+init do bucket) + api + web locais (precisa de JWT_SECRET); ver docs/DEPLOY-DOCKER.md
 cd backend && npm test       # sobe o Postgres de teste (Docker) se preciso e roda Jest + Supertest (ver backend/test/README.md)
 cd frontend && npx tsc --noEmit   # typecheck do front (estrito)
 cd frontend && CI=true npm test
@@ -50,6 +50,17 @@ Back em `:5000`, front em `:3000`. Variáveis em `backend/.env` (modelo: `backen
 - Separação por restaurante: tabela **`usuario_restaurantes`** (renomeada da `usuario_restaurante_estoque` na migration 016; vincula usuário↔restaurante). Checada por `assertBoletosAcessoRestaurante` e `usuarioRestaurantesRestritos` em `middleware/permissoes.ts`.
 - **Flags são lidas do banco a cada requisição** (`loadUserFlags`), não confie só no JWT.
 - Toda rota que recebe `:id` de boleto/meta deve buscar o registro e validar o `restaurante_id` dele (padrão já usado em PUT/DELETE de boletos). Mantenha esse padrão em rotas novas.
+
+## Boleto por imagem (Gemini), baixa de pagamento e soft delete
+- Rotas em `backend/routes/boletosImagem.ts`: `POST /api/boletos/extrair` (imagem até 5 MB -> Gemini; 503 sem `GEMINI_API_KEY`; rate limit por usuário), `POST|DELETE /api/boletos/:id/pago` (baixa e desfazer), `GET /api/boletos/:id/anexo`. Libs: `lib/{gemini,storage,imagem,linhaDigitavel,fornecedor,rateLimit}.ts`; migration `018`.
+- **Soft delete:** boleto excluído recebe `deleted_at`; **toda consulta de boleto deve filtrar `deleted_at IS NULL`**. A limpeza definitiva é `cd backend && npm run limpar-boletos -- --dry-run|--confirmar` (só age com `BOLETOS_RETENCAO_DIAS` válida; apaga os objetos do bucket só se `STORAGE_*` estiver definido, senão limpa só o banco; apaga a linha no banco antes do arquivo; `--dry-run` + `--confirmar` juntos = erro de uso; também apaga `boletos_ocorrencias` mais antigas que a retenção).
+- **Boleto pago é travado:** `PUT`/`DELETE` de boleto pago só para admin (403 para os demais).
+- CORS expõe `Retry-After` e `Content-Disposition`.
+- **Armazenamento:** serviço externo S3-compatível (**MinIO**) via `@aws-sdk/client-s3` em `lib/storage.ts` (interface `Storage`, injetável nos testes). Bucket privado, criado fora da API; sem `STORAGE_*` completo a API sobe e o anexo responde 503. Não há volume local nem `UPLOADS_DIR` (removido).
+- **Fluxo:** `POST /api/boletos/extrair` lê a imagem em memória (não grava nada); o anexo só é gravado após o usuário confirmar o boleto. A imagem só sai por `GET /api/boletos/:id/anexo`. Teto diário de leituras por IA por usuário (`EXTRAIR_LIMITE_DIARIO`, padrão 30, tabela `boletos_extracoes_uso`, migration 019), além do rate limit por minuto.
+- **Linha digitável** é única **globalmente** (todos os restaurantes) entre boletos não excluídos (índice parcial); duplicidade gera ocorrência para o admin.
+- Flag `usuarios.pode_marcar_pago`: quem pode dar baixa/desfazer (admin sempre pode).
+- Variáveis: `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_BASE_URL` (só https, ou http em localhost; inválida => 503), `GEMINI_TIMEOUT_MS` (padrão 20000), `STORAGE_ENDPOINT` (https; http só localhost/hostname interno), `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`, `STORAGE_REGION`, `STORAGE_FORCE_PATH_STYLE`, `BOLETOS_RETENCAO_DIAS`, `EXTRAIR_RATE_LIMIT_MAX`, `EXTRAIR_LIMITE_DIARIO` (ver `docs/DEPLOY-DOCKER.md`). Imagens são dados de terceiros enviados ao Google (LGPD): usar plano pago.
 
 ## Regras para o Claude
 - **Não** adicione funcionalidade de gastos, relatórios ou estoque; estão em remoção.

@@ -805,3 +805,408 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ===== Leitura por imagem, pago, cartões, modais (mobile-first) ===== */
+.boletos-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Cadastro por imagem: só em aparelho de toque (celular). No desktop, só o aviso. */
+.boletos-ia {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+}
+
+.boletos-ia-touch {
+  display: none;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.boletos-ia-desktop {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #52616f;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .boletos-ia-touch {
+    display: flex;
+  }
+
+  .boletos-ia-desktop {
+    display: none;
+  }
+}
+
+.boletos-ia-btn,
+.boletos-btn-grande,
+.boletos-btn-copiar--grande {
+  min-height: 48px;
+  width: 100%;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.boletos-ia-btn {
+  background: #2c3e50;
+  color: #fff;
+  border: 0;
+}
+
+.boletos-ia-btn:disabled,
+.boletos-btn-grande:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.boletos-ia-status,
+.boletos-ia-aviso {
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  border-radius: 8px;
+  background: #eef6ff;
+  color: #1e3a5f;
+  border: 1px solid #bcd7f5;
+}
+
+.boletos-ia-erro {
+  padding: 0.65rem 0.8rem;
+  border-radius: 8px;
+  background: #fff1f2;
+  color: #991b1b;
+  border: 1px solid #fecdd3;
+}
+
+.boletos-ia-erro p {
+  margin: 0 0 0.5rem;
+}
+
+.boletos-ia-erro-acoes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.boletos-ia-avisos {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  color: #92400e;
+}
+
+.boletos-previa,
+.boletos-anexo-img {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  margin-top: 0.6rem;
+  border-radius: 8px;
+  border: 1px solid #d5dde5;
+  object-fit: contain;
+}
+
+.boletos-anexo-img {
+  max-height: 70vh;
+  margin: 0 auto 0.75rem;
+}
+
+.boletos-anexo-linha {
+  margin-bottom: 0.75rem;
+}
+
+/* Campos não lidos pela IA: borda + texto (não só cor) */
+.boletos-campo--nao-lido input,
+.boletos-campo--nao-lido select {
+  border-color: #d97706;
+  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.25);
+  background: #fffbeb;
+}
+
+.boletos-nao-lido {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #92400e;
+}
+
+.boletos-linha-bloco {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.boletos-linha-bloco input {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  letter-spacing: 0.02em;
+}
+
+/* Fonte >= 16px e alvos de 44px+ (evita zoom no iOS) */
+.boletos-form input,
+.boletos-form select,
+.boletos-motivo textarea {
+  font-size: 16px;
+  min-height: 44px;
+}
+
+.boletos-btn-adicionar,
+.boletos-btn-cancelar {
+  min-height: 48px;
+}
+
+.boletos-form-rodape {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+@media (max-width: 720px) {
+  /* Ação principal na zona do polegar */
+  .boletos-form-rodape {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    padding: 0.6rem 0 calc(0.6rem + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, #fff 80%, rgba(255, 255, 255, 0));
+  }
+}
+
+/* Selo de pagamento: ícone + texto */
+.boletos-selo {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.boletos-selo--pago {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.boletos-selo--aberto {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.boletos-fornecedor {
+  display: block;
+  color: #64748b;
+}
+
+/* Ações: botões com alvo de toque */
+.boletos-actions button,
+.boletos-btn-anexo,
+.boletos-btn-copiar,
+.boletos-btn-pagar {
+  min-height: 44px;
+  min-width: 44px;
+  font-size: 0.95rem;
+}
+
+.boletos-btn-anexo,
+.boletos-btn-copiar {
+  background: #fff;
+  color: #2c3e50;
+  border: 1px solid #c5d0da;
+  border-radius: 6px;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+}
+
+.boletos-btn-copiar--grande {
+  background: #eef2f7;
+  border-color: #9fb0c1;
+}
+
+.boletos-btn-pagar {
+  background: #1f9d55;
+  color: #fff;
+  border: 0;
+  border-radius: 6px;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+}
+
+.boletos-btn-pagar:disabled {
+  opacity: 0.7;
+}
+
+.boletos-erro-inline {
+  color: #b91c1c;
+  font-size: 0.85rem;
+}
+
+/* Lista em cartões (celular) */
+.boletos-cartoes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.boletos-cartao {
+  background: #fff;
+  border: 1px solid #e6ebf0;
+  border-radius: 10px;
+  padding: 0.85rem;
+  min-width: 0;
+}
+
+.boletos-cartao-topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.boletos-cartao-valor {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #1f2937;
+}
+
+.boletos-cartao-desc {
+  margin: 0.35rem 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.boletos-cartao-meta,
+.boletos-cartao-linha {
+  margin: 0.15rem 0;
+  font-size: 0.88rem;
+  color: #52616f;
+}
+
+.boletos-cartao-linha {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.boletos-cartao-situacao {
+  margin: 0.5rem 0;
+}
+
+.boletos-cartao-acoes {
+  gap: 0.5rem;
+}
+
+.boletos-cartao-acoes button {
+  flex: 1 1 calc(50% - 0.5rem);
+}
+
+/* Modais (folha) */
+.boletos-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.boletos-modal-card {
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 14px 14px 0 0;
+  padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom));
+}
+
+.boletos-modal-card h3 {
+  margin: 0 0 0.5rem;
+}
+
+.boletos-modal-card--imagem {
+  text-align: center;
+}
+
+.boletos-similares {
+  list-style: none;
+  margin: 0.5rem 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.boletos-similares li {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.boletos-modal-acoes {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.5rem;
+}
+
+.boletos-modal-acoes .boletos-btn-adicionar {
+  margin-top: 0;
+}
+
+.boletos-motivo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.boletos-motivo textarea {
+  width: 100%;
+  border: 1px solid #c5d0da;
+  border-radius: 6px;
+  padding: 0.5rem;
+  font: inherit;
+  font-size: 16px;
+}
+
+@media (min-width: 721px) {
+  .boletos-modal {
+    align-items: center;
+  }
+
+  .boletos-modal-card {
+    width: min(520px, 92vw);
+    border-radius: 14px;
+  }
+
+  .boletos-modal-acoes {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+
+  .boletos-modal-acoes > button {
+    width: auto;
+    min-width: 160px;
+  }
+
+  .boletos-btn-copiar--grande {
+    width: auto;
+    align-self: flex-start;
+    padding: 0 1rem;
+  }
+}

@@ -15,11 +15,18 @@
  *   TEST_DB_VOLUME      volume de dados     (padrão: pg_controle_data)
  *   WSL_DISTRO          distro WSL2 com Docker (padrão: Ubuntu)
  *   TEST_DB_AUTOSTART=0 não mexe no Docker; só testa a conexão
+ *
+ * MinIO de teste (opcional; sem ele os testes de S3 real são PULADOS, não falham):
+ *   sobe o container `minio-controle` (API 127.0.0.1:9100, console 9101) e cria o bucket privado `boletos-test`.
+ *   TEST_MINIO_ENDPOINT/BUCKET/ACCESS_KEY/SECRET_KEY  conexão (padrão: http://127.0.0.1:9100, boletos-test, minioteste/minioteste123)
+ *   TEST_MINIO_CONTAINER (minio-controle)  TEST_MINIO_IMAGE (cgr.dev/chainguard/minio:latest)
+ *   TEST_MINIO_AUTOSTART=0 não mexe no Docker para o MinIO
  */
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { Pool } = require('pg');
 const { dbConfig } = require('../test/helpers/dbConfig');
+const { configMinio, minioAcessivel, garantirBucket } = require('../test/helpers/minio');
 
 const BACKEND_DIR = path.join(__dirname, '..');
 const CONTAINER = process.env.TEST_DB_CONTAINER || 'pg-controle';
@@ -126,6 +133,70 @@ async function garantirBancoDeTeste(cfg) {
   }
 }
 
+/**
+ * Sobe o MinIO de teste, se possível. NUNCA aborta: sem Docker/MinIO os testes de S3 real são pulados.
+ * (Imagem do Chainguard: o Docker Hub/quay do MinIO não servem mais. Roda como root so porque e efemero e de teste:
+ * o usuario nonroot da imagem nao consegue escrever em /data.)
+ */
+async function garantirMinio() {
+  const cfg = configMinio();
+  if (await minioAcessivel(cfg)) {
+    log(`MinIO já disponível em ${cfg.endpoint}.`);
+  } else {
+    const url = new URL(cfg.endpoint);
+    const local = ['127.0.0.1', 'localhost', '::1'].includes(url.hostname);
+    if (process.env.TEST_MINIO_AUTOSTART === '0' || !local) {
+      log('MinIO de teste indisponível (autostart desligado ou host remoto); testes de MinIO serão pulados.');
+      return;
+    }
+    const nome = process.env.TEST_MINIO_CONTAINER || 'minio-controle';
+    const imagem = process.env.TEST_MINIO_IMAGE || 'cgr.dev/chainguard/minio:latest';
+    const porta = url.port || '9100';
+    const tenta = (args) => {
+      const [cmd, cmdArgs] = IS_WINDOWS ? ['wsl', ['-d', DISTRO, '--', 'docker', ...args]] : ['docker', args];
+      const r = spawnSync(cmd, cmdArgs, { encoding: 'utf8' });
+      return r.error ? { status: 1, stdout: '', stderr: r.error.message } : r;
+    };
+    if (tenta(['version', '--format', '{{.Server.Version}}']).status !== 0) {
+      log('Docker indisponível: testes de MinIO serão pulados.');
+      return;
+    }
+    const estado = tenta(['ps', '-a', '--filter', `name=^/${nome}$`, '--format', '{{.State}}']).stdout.trim();
+    let r;
+    if (estado) {
+      log(`iniciando o container ${nome} (estava "${estado}")...`);
+      r = estado === 'running' ? { status: 0 } : tenta(['start', nome]);
+    } else {
+      log(`criando o container ${nome} a partir de ${imagem}...`);
+      r = tenta([
+        'run', '-d', '--name', nome, '--user', '0',
+        '-p', `127.0.0.1:${porta}:9000`, '-p', `127.0.0.1:${Number(porta) + 1}:9001`,
+        '-e', `MINIO_ROOT_USER=${cfg.accessKey}`, '-e', `MINIO_ROOT_PASSWORD=${cfg.secretKey}`,
+        imagem, 'server', '/data', '--console-address', ':9001'
+      ]);
+    }
+    if (r.status !== 0) {
+      log(`não consegui subir o MinIO (${(r.stderr || '').trim()}); testes de MinIO serão pulados.`);
+      return;
+    }
+    let ok = false;
+    for (let i = 0; i < 30 && !ok; i += 1) {
+      ok = await minioAcessivel(cfg);
+      if (!ok) await dormir(1000);
+    }
+    if (!ok) {
+      log('o MinIO não respondeu em 30s; testes de MinIO serão pulados.');
+      return;
+    }
+  }
+  try {
+    await garantirBucket(cfg);
+    log(`bucket de teste pronto (${cfg.bucket}).`);
+  } catch (err) {
+    log(`não consegui garantir o bucket ${cfg.bucket}: ${err.message}; testes de MinIO serão pulados.`);
+  }
+}
+
 async function main() {
   let cfg;
   try {
@@ -149,6 +220,7 @@ async function main() {
   }
 
   await garantirBancoDeTeste(cfg);
+  await garantirMinio().catch((err) => log(`MinIO: ${err.message}; testes de MinIO serão pulados.`));
   log(`banco de teste pronto (${cfg.database}). Rodando o Jest...\n`);
 
   const jest = spawnSync(process.execPath, [require.resolve('jest/bin/jest'), ...process.argv.slice(2)], {

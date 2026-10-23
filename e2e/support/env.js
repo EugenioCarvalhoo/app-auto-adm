@@ -15,11 +15,26 @@ if (!/_test$/.test(db.database)) {
   throw new Error(`Recusado: o banco E2E deve terminar em "_test" (recebido "${db.database}").`);
 }
 
+const { configMinio, envStorage } = require('../../backend/test/helpers/minio');
+
 const API_PORT = parseInt(process.env.E2E_API_PORT, 10) || 5100;
 const WEB_PORT = parseInt(process.env.E2E_WEB_PORT, 10) || 3100;
 
+const GEMINI_MOCK_PORT = parseInt(process.env.E2E_GEMINI_PORT, 10) || 5190;
+// Linha digitável válida (47 dígitos) que o Gemini falso devolve; a mesma usada nos testes mockados.
+const LINHA_GEMINI_MOCK = '34190000090000000000000000079327799990000001081';
+
+// MinIO de teste (o mesmo container do Jest); o bucket precisa terminar em "-test". Pode estar fora do ar: os
+// testes que dependem dele PULAM (ver fixtures.minioPronto).
+const minio = configMinio();
+
 module.exports = {
   db,
+  minio,
+  envStorage: envStorage(minio),
+  GEMINI_MOCK_PORT,
+  LINHA_GEMINI_MOCK,
+  LIMITE_DIARIO_E2E: 5,
   API_PORT,
   WEB_PORT,
   API_URL: `http://127.0.0.1:${API_PORT}/api`,

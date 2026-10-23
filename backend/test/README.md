@@ -23,6 +23,18 @@ Variáveis opcionais: `WSL_DISTRO` (distro WSL2 com Docker, padrão `Ubuntu`), `
 
 `npm run test:jest` roda o Jest puro, sem tocar no Docker (é o que o CI usa, com o Postgres do próprio GitHub).
 
+## MinIO de teste (S3 real)
+
+Os testes do storage S3 (`storageMinio.test.js`) e o fluxo ponta a ponta de imagem (`storageFluxoMinio.test.js`: extrair -> criar boleto -> anexar -> baixar -> excluir -> `limpar-boletos`) rodam contra um **MinIO real**, análogo ao `pg-controle`:
+
+- `npm test` sobe sozinho o container **`minio-controle`** (API `127.0.0.1:9100`, console `9101`; imagem `cgr.dev/chainguard/minio:latest`, a mesma do `docker-compose.yml`, porque o Docker Hub/quay do MinIO não servem mais; roda como root só por ser efêmero e de teste, pois o usuário `nonroot` da imagem não escreve em `/data`) e cria o bucket **privado** `boletos-test` (idempotente, via SDK, sem precisar do `mc`).
+- Credenciais de teste: `minioteste` / `minioteste123`. Guarda de segurança: o bucket precisa terminar em `-test`.
+- **Sem Docker/MinIO, esses testes são PULADOS com aviso** (`MinIO de teste fora do ar ... testes de MinIO serão PULADOS`), nunca falham. O `globalSetup.js` testa o MinIO e, se estiver no ar, garante o bucket (é o que basta no CI com `npm run test:jest`).
+- Variáveis: `TEST_MINIO_ENDPOINT` (padrão `http://127.0.0.1:9100`), `TEST_MINIO_BUCKET`, `TEST_MINIO_ACCESS_KEY`, `TEST_MINIO_SECRET_KEY`, `TEST_MINIO_CONTAINER`, `TEST_MINIO_IMAGE`, `TEST_MINIO_AUTOSTART=0` (não mexe no Docker).
+- Manual: `docker run -d --name minio-controle --user 0 -p 127.0.0.1:9100:9000 -p 127.0.0.1:9101:9001 -e MINIO_ROOT_USER=minioteste -e MINIO_ROOT_PASSWORD=minioteste123 cgr.dev/chainguard/minio:latest server /data --console-address :9001` (no Windows, via `wsl -d Ubuntu -- docker ...`). Se sumir no meio do trabalho: `docker start minio-controle`.
+
+Os demais testes de imagem (rotas, permissões, teto diário) usam um **storage fake em memória** (`helpers/storageFake.js`, injetado com `definirStorage`), sem rede. O `limpar-boletos` (processo filho) usa o preload `helpers/preloadStorageFake.js`, que troca `criarStorageS3` por um storage em diretório temporário.
+
 ## Subir o Postgres de teste manualmente (opcional)
 
 O padrão é o container local `pg-controle` (Postgres 15, porta `5433`, banco `controle_financeiro_test`):
@@ -74,7 +86,18 @@ npx jest                          # Jest puro (exige o Postgres já no ar)
 | `auth.test.js` | login, verify, JWT inválido/expirado/forjado, permissão lida do banco |
 | `restaurantes.test.js` | admin vê todos, usuário só os vinculados, só admin gerencia |
 | `boletos.test.js` | CRUD, validações, isolamento entre restaurantes (IDOR), semana e metas |
+| `boletosExtrair.test.js` | `POST /boletos/extrair` (só leitura em memória, devolve `hash_sha256`, não grava anexo/objeto): 503, 413, 415, repetida, nota, 502, 429, IDOR |
+| `boletosAnexo.test.js` | `POST /boletos/:id/anexo`: hash divergente 400, já tem imagem 409 (inclusive corrida/23505), boleto pago, 503 sem storage, 415/413, IDOR, soft delete, órfão apagado se o INSERT falha |
+| `boletosLimiteDiario.test.js` | teto diário `EXTRAIR_LIMITE_DIARIO`: 429 `LIMITE_DIARIO` sem chamar o Gemini, por usuário e por dia, virada de dia, o que conta/não conta, concorrência |
+| `boletosLinha.test.js` | linha digitável (duplicada global, corrida 23505), similaridade, `anexo_id` ignorado, soft delete em todas as consultas |
+| `boletosPagamento.test.js` | pagar/desfazer, `GET /anexo` (storage fake), ocorrências do admin |
+| `storage.test.js` | `lerConfigStorage` (https sempre; http só localhost/hostname interno), `definirStorage`/`getStorage`, validações do `criarStorageS3` sem rede |
+| `storageMinio.test.js` | `criarStorageS3` contra MinIO real: salvar/ler/apagar, idempotência, traversal, bucket/credenciais erradas (pula sem MinIO) |
+| `storageFluxoMinio.test.js` | ponta a ponta HTTP + MinIO real + `limpar-boletos --confirmar` (pula sem MinIO) |
+| `podeMarcarPago.test.js` | flag `pode_marcar_pago` nas permissões, login e verify |
+| `limparBoletos.test.js` | `scripts/limpar-boletos.js` (retenção, `--dry-run`, `--confirmar`, arquivos e órfãos, storage fora do ar, sem `STORAGE_*`); storage trocado por preload |
+| `linhaDigitavel.test.js`, `fornecedor.test.js`, `gemini.test.js`, `rateLimit.test.js` | unitários de `lib/` (sem banco); `helpers/linhas.js` gera linhas válidas |
 | `permissoes.test.js` | gestão de usuários só pelo admin, efeito imediato, transação |
 | `migrations.test.js` | schema, regra da 015 com dados reais, idempotência do migrate |
-| `upgrade.test.js` | banco isolado: estado 015 com dados, aplica 016+017 pelo `migrate.js`, confere vínculos, índices, boletos/metas e idempotência |
+| `upgrade.test.js` | banco isolado: estado 015 com dados, aplica 016+017+018 pelo `migrate.js`, confere vínculos, índices, boletos/metas e idempotência |
 | `healthMigrations.test.js` | `/api/health/ready`: 200 com migrations em dia, 503 com pendentes, 503 com banco inacessível |

@@ -10,7 +10,7 @@ type Restaurante = Pick<RestauranteApi, 'id' | 'nome'>;
 
 export type UsuarioPermissaoRow = Usuario;
 
-type ModuloKey = 'modulo_boletos';
+type ModuloKey = 'modulo_boletos' | 'pode_marcar_pago';
 
 interface Props {
   onError?: (msg: string | null) => void;
@@ -21,6 +21,7 @@ const NOVO_VAZIO = {
   password: '',
   nome: '',
   modulo_boletos: false,
+  pode_marcar_pago: false,
   restaurante_ids: [] as number[]
 };
 
@@ -70,6 +71,7 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
         `${API_URL}/admin/usuarios-permissoes/${usuario.id}`,
         {
           modulo_boletos: usuario.modulo_boletos,
+          pode_marcar_pago: !!usuario.pode_marcar_pago,
           restaurante_ids: usuario.restaurante_ids
         }
       );
@@ -137,6 +139,7 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
         password: novo.password,
         nome: novo.nome.trim(),
         modulo_boletos: novo.modulo_boletos,
+        pode_marcar_pago: novo.modulo_boletos && novo.pode_marcar_pago,
         restaurante_ids: novoPrecisaRestaurante ? novo.restaurante_ids : []
       });
       setNovo(NOVO_VAZIO);
@@ -227,6 +230,17 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
                 <span>Boletos e notas</span>
               </label>
             </li>
+            <li>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={novo.pode_marcar_pago}
+                  disabled={!novo.modulo_boletos}
+                  onChange={() => alternarModuloNovo('pode_marcar_pago')}
+                />
+                <span>Pode marcar boleto como pago</span>
+              </label>
+            </li>
           </ul>
         </fieldset>
         {novoPrecisaRestaurante && (
@@ -268,6 +282,7 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
               <tr>
                 <th>Usuário</th>
                 <th className="admin-perm-th-check">Boletos e notas</th>
+                <th className="admin-perm-th-check">Pode marcar boleto como pago</th>
                 <th className="admin-perm-th-acao">Ações</th>
               </tr>
             </thead>
@@ -293,6 +308,17 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
                         />
                       </label>
                     </td>
+                    <td className="admin-perm-td-check">
+                      <label className="admin-perm-check">
+                        <input
+                          type="checkbox"
+                          aria-label={`Pode marcar boleto como pago: ${u.username}`}
+                          checked={u.is_admin || !!u.pode_marcar_pago}
+                          disabled={u.is_admin || !u.modulo_boletos || savingId === u.id}
+                          onChange={() => toggleModulo(u, 'pode_marcar_pago')}
+                        />
+                      </label>
+                    </td>
                     <td className="admin-perm-td-acao">
                       {!u.is_admin && (
                         <button
@@ -308,7 +334,7 @@ const AdminPermissoesUsuarios: React.FC<Props> = ({ onError }) => {
                   </tr>
                   {precisaRestaurantes(u) && (
                     <tr className="admin-perm-rest-row">
-                      <td colSpan={3}>
+                      <td colSpan={4}>
                         <fieldset className="admin-perm-rest-fieldset">
                           <legend className="admin-perm-rest-legend">Restaurantes liberados</legend>
                           {restaurantes.length === 0 ? (

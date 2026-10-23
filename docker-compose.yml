@@ -1,6 +1,7 @@
 # Stack completa para rodar/validar as imagens de produção localmente:
 #   docker compose up --build
-# Front em http://localhost:8080, API em http://localhost:5000/api, Postgres só na rede interna.
+# Front em http://localhost:8080, API em http://localhost:5000/api, Postgres só na rede interna,
+# MinIO (imagens dos boletos) em http://localhost:9001 (console) só neste computador.
 # No Easypanel não se usa este arquivo: cada serviço (api, web, postgres) é criado separado.
 services:
   db:
@@ -17,6 +18,51 @@ services:
       timeout: 5s
       retries: 10
 
+  # MinIO (S3-compativel): guarda as imagens dos boletos. SO PARA USO LOCAL: os defaults abaixo sao
+  # publicos; defina MINIO_ROOT_USER/MINIO_ROOT_PASSWORD proprios se a maquina for compartilhada.
+  # Portas publicadas apenas em 127.0.0.1 (API S3 em 9000, console em 9001).
+  minio:
+    # O MinIO deixou de publicar imagens no Docker Hub (minio/minio e minio/mc nao existem mais) e o quay.io
+    # exige login. Usamos a imagem do Chainguard, que traz o servidor e o cliente `mc`. Fixe um digest se quiser.
+    image: ${MINIO_IMAGE:-cgr.dev/chainguard/minio:latest}
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    healthcheck:
+      # A imagem nao tem curl/wget: testa /minio/health/live com o /dev/tcp do bash.
+      test:
+        - CMD
+        - bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/9000 && printf "GET /minio/health/live HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 && read -r l <&3 && [[ $$l == *200* ]]'
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Cria o bucket PRIVADO (idempotente, sem acesso anonimo) e termina.
+  minio-init:
+    image: ${MINIO_IMAGE:-cgr.dev/chainguard/minio:latest}
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-boletos}
+    entrypoint: >
+      sh -c "
+      mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" &&
+      mc mb --ignore-existing \"local/$$STORAGE_BUCKET\" &&
+      mc anonymous set none \"local/$$STORAGE_BUCKET\"
+      "
+    restart: "no"
+
   api:
     build: ./backend
     environment:
@@ -27,11 +73,29 @@ services:
       DB_USER: postgres
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       JWT_SECRET: ${JWT_SECRET:?defina a variavel JWT_SECRET antes de subir}
+      # Opcionais. Sem GEMINI_API_KEY a leitura por IA responde 503 e o app sobe normalmente.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-}
+      GEMINI_TIMEOUT_MS: ${GEMINI_TIMEOUT_MS:-}
+      BOLETOS_RETENCAO_DIAS: ${BOLETOS_RETENCAO_DIAS:-}
+      EXTRAIR_RATE_LIMIT_MAX: ${EXTRAIR_RATE_LIMIT_MAX:-}
+      EXTRAIR_LIMITE_DIARIO: ${EXTRAIR_LIMITE_DIARIO:-}
+      # Armazenamento das imagens: MinIO local abaixo (em producao e um servico separado/externo).
+      # Aqui usa o usuario root do MinIO so por ser ambiente local; em producao use um usuario so do bucket.
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-boletos}
+      STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      STORAGE_REGION: ${STORAGE_REGION:-us-east-1}
+      STORAGE_FORCE_PATH_STYLE: ${STORAGE_FORCE_PATH_STYLE:-true}
     ports:
       - "5000:5000"
     depends_on:
       db:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
 
   web:
     build:
@@ -46,3 +110,5 @@ services:
 
 volumes:
   pg_data:
+  minio_data:
+
