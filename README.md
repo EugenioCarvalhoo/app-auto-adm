@@ -31,8 +31,6 @@ npm run create-admin                     # admin / admin123 — troque a senha
 npm run dev                              # API em :5000 e front em :3000
 ```
 
-Detalhes e solução de problemas: [setup.md](./setup.md).
-
 ## Rodar com Docker
 ```bash
 export JWT_SECRET=$(openssl rand -hex 32)

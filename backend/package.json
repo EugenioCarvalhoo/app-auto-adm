@@ -12,6 +12,7 @@
     "migrate": "node database/migrate.js",
     "create-admin": "node database/create_admin.js",
     "test": "node scripts/test.js",
+    "test:changed": "node scripts/test.js --onlyChanged --passWithNoTests",
     "test:watch": "node scripts/test.js --watch",
     "test:coverage": "node scripts/test.js --coverage",
     "test:jest": "jest"
