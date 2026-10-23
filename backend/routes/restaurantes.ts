@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../db';
 import { authenticateToken } from '../middleware/auth';
+import { ehTabelaInexistente, MSG_BANCO_DESATUALIZADO } from '../lib/erros';
 import {
   requireAdmin,
   loadUserFlags,
@@ -50,6 +51,9 @@ router.get('/api/restaurantes', authenticateToken, async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Erro ao buscar restaurantes:', error);
+    if (ehTabelaInexistente(error)) {
+      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
+    }
     res.status(500).json({ error: 'Erro ao buscar restaurantes' });
   }
 });
@@ -73,6 +77,9 @@ router.get('/api/restaurantes/:id', authenticateToken, async (req, res) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Erro ao buscar restaurante:', error);
+    if (ehTabelaInexistente(error)) {
+      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
+    }
     res.status(500).json({ error: 'Erro ao buscar restaurante' });
   }
 });
@@ -93,6 +100,9 @@ router.post('/api/restaurantes', authenticateToken, requireAdmin, async (req, re
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Erro ao criar restaurante:', error);
+    if (ehTabelaInexistente(error)) {
+      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
+    }
     res.status(500).json({ error: 'Erro ao criar restaurante' });
   }
 });
@@ -117,6 +127,9 @@ router.put('/api/restaurantes/:id', authenticateToken, requireAdmin, async (req,
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Erro ao atualizar restaurante:', error);
+    if (ehTabelaInexistente(error)) {
+      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
+    }
     res.status(500).json({ error: 'Erro ao atualizar restaurante' });
   }
 });
@@ -135,6 +148,9 @@ router.delete('/api/restaurantes/:id', authenticateToken, requireAdmin, async (r
     res.json({ message: 'Restaurante desativado com sucesso' });
   } catch (error) {
     console.error('Erro ao deletar restaurante:', error);
+    if (ehTabelaInexistente(error)) {
+      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
+    }
     res.status(500).json({ error: 'Erro ao deletar restaurante' });
   }
 });

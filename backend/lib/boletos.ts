@@ -1,4 +1,5 @@
 import type { Response } from 'express';
+import { codigoErro, ehTabelaInexistente, MSG_BANCO_DESATUALIZADO } from './erros';
 import { normalizarTipo, vencimentoEfetivo, grupoSemana, TipoBoleto } from './boletosSemana';
 
 /** Linha de boletos_notas (colunas de BOLETO_SELECT). NUMERIC chega como string do pg. */
@@ -95,8 +96,11 @@ export function parseValorBoleto(raw: unknown): number | null {
 }
 
 export function erroTabelaBoletos(error: unknown, res: Response): boolean {
-  const code = (error as { code?: string } | null)?.code;
-  if (code === '42P01' || code === '42703') {
+  if (ehTabelaInexistente(error)) {
+    res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
+    return true;
+  }
+  if (codigoErro(error) === '42703') {
     res.status(503).json({ error: 'Módulo de boletos não instalado. Rode a migração 014.' });
     return true;
   }
