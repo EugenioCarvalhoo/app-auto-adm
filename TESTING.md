@@ -25,12 +25,12 @@ npm run build         # tsc -> dist/
 ## Frontend (`frontend/`)
 
 - Testes com **`react-scripts test`** (Jest + `@testing-library/react`).
-- Arquivos: `*.test.js` ou `*.test.tsx` junto ao código; `setupTests.js` importa `@testing-library/jest-dom`.
+- Arquivos: `*.test.ts` ou `*.test.tsx` junto ao código; `setupTests.ts` importa `@testing-library/jest-dom`. O front é TypeScript estrito (sem `allowJs`); tipos do Jest via `@types/jest`.
 
 ```bash
 cd frontend
 npm test              # CI=true npm test para execução não interativa
-npx tsc --noEmit
+npx tsc --noEmit      # typecheck estrito (roda também no CI)
 ```
 
 ## E2E (`e2e/`)

@@ -36,7 +36,7 @@ node database/migrate.js && exec node dist/server.js
 O CRA embute `REACT_APP_*` no JavaScript **na hora do build**. Variável de ambiente do container em runtime não muda nada.
 - No Easypanel, o Buildx passa as variáveis do serviço como build args, e o Dockerfile só recebe as que declara com `ARG` (o `frontend/Dockerfile` declara `REACT_APP_API_URL`). Então crie `REACT_APP_API_URL` nas **variáveis de ambiente do serviço web**, com a URL pública da API **terminando em `/api`**, ex.: `https://api.exemplo.com/api`. Mudou a URL, refaça o deploy com **Force Rebuild** (o cache do Docker pode reaproveitar o bundle antigo).
 - Build args não são mecanismo de segredo: só ponha aqui a URL pública, nunca senha ou token.
-- Sem ela, `frontend/src/config.js` deduz o host a partir do hostname (padrão `financialmanagement` para `financialmanagementapp` em `easypanel.host`); fora desse padrão a API não é encontrada.
+- Sem ela, `frontend/src/config.ts` deduz o host a partir do hostname (padrão `financialmanagement` para `financialmanagementapp` em `easypanel.host`); fora desse padrão a API não é encontrada.
 
 ## Rodar tudo localmente com Docker
 

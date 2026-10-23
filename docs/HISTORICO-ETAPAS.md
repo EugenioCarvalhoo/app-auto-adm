@@ -147,3 +147,15 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
 - CI: o job `backend` roda `npm run typecheck` e `npm run build` antes do Jest.
 - **Easypanel:** o Comando de Início da API deve ser `npm run start:prod` (migrations + `node dist/server.js`) ou, sem migration automática, `npm start`; `node server.js` não existe mais. Atualizar antes do primeiro deploy após o merge.
 - `docker build ./backend` testado (Docker no WSL, distro `Ubuntu`) em 22/10/2026: build concluído, incluindo `npm ci` e `tsc`. O container não foi executado (`node dist/server.js` não foi testado).
+
+## 9. Migração do frontend para TypeScript estrito (23/10/2026)
+- Branch `feat/frontend-typescript-estrito` (sem commit ainda). O front deixa de misturar `.js` e `.tsx`: tudo em `.ts`/`.tsx`.
+- Renomeados: `App.js`->`App.tsx`, `config.js`->`config.ts`, `Login.js`->`Login.tsx`, `CadastroRestaurantes.js`->`CadastroRestaurantes.tsx`, `lib/userPermissoes.js`->`.ts`, `setupTests.js`->`.ts`, `Login.test.js`->`.tsx`, `userPermissoes.test.js`->`.ts`. `AdminPermissoesUsuarios.tsx` e `BoletosModulo.tsx` ajustados.
+- Novos: `frontend/src/types.ts` (tipos compartilhados da API) e `frontend/src/lib/erros.ts` (`mensagemErro(error: unknown, fallback)`).
+- `frontend/tsconfig.json`: `allowJs=false`, `strict`, `noImplicitReturns`, `noUnusedLocals`, `noUnusedParameters`, `noUncheckedIndexedAccess`.
+- `@types/jest` `^27.5.2` em `devDependencies` do front. O CI já roda `npx tsc --noEmit` no job `frontend`; nenhuma mudança de workflow, Dockerfile ou regra de negócio.
+- Docs atualizadas: `CLAUDE.md` (stack, comandos, caminhos, regra de TS estrito sem `any` e `types.ts` alinhado ao back), agentes `frontend-ui`/`qa-tests`/`devops-docs`, `README.md`, `TESTING.md`, `setup.md`, `docs/DEPLOY-DOCKER.md`. Menções a `.js` nas seções anteriores deste arquivo e nos guias `*_EASYPANEL.md`/`MODULO_ESTOQUE.md`/`docs/PLANO-DE-ACAO.md` foram mantidas como registro histórico.
+- Pendências:
+  - Tipos `Boleto`, `SemanaResumo` e `Meta` em `types.ts` ainda não foram conferidos linha a linha contra `backend/routes/boletos.ts`; o `qa-tests` está conferindo.
+  - E2E (Playwright) está sendo rodado pelo `qa-tests`; resultado ainda não registrado aqui.
+  - Faltam commit e validação do build do front (`CI=true npx react-scripts build`) após a migração.

@@ -4,8 +4,8 @@ Sistema web para restaurantes. Escopo ativo: **(1) cadastro de boletos/notas com
 
 ## Stack
 - **Backend:** Node + Express 4 em **TypeScript** (compilado com `tsc` para `backend/dist/`), PostgreSQL (`pg`, SQL direto, sem ORM), JWT (`jsonwebtoken`), `bcryptjs`. `backend/server.ts` só monta o app; o resto fica em `routes/`, `middleware/`, `lib/` e `db.ts`. `typescript` fica fixado em `~5.9` (7.x quebra `moduleResolution: node`); não suba sem ajustar o `tsconfig.json`. `database/` (migrate, create_admin) e `scripts/` continuam JS.
-- **Frontend:** React 18 (Create React App), mistura de `.js` e `.tsx`, `axios`. Navegação por estado (`telaAtual` em `frontend/src/App.js`), sem router.
-- **Deploy:** Easypanel com Docker (`backend/Dockerfile` multi-stage com `tsc`, roda como `node`, com HEALTHCHECK; `frontend/Dockerfile` com build do CRA + nginx via `frontend/nginx.conf`). O `CMD` da API já roda `node database/migrate.js` e depois `exec node dist/server.js` (`RUN_MIGRATIONS=0` pula as migrations); com o builder Dockerfile o `CMD` vale (o Comando de Início do Easypanel é de Railpack/Nixpacks; não deixe um antigo sobrescrevendo). Front e API em hosts diferentes: `REACT_APP_API_URL` é variável do serviço web, que o Easypanel repassa como build arg (o Dockerfile declara o `ARG`) (ver `frontend/src/config.js`). Guia: `docs/DEPLOY-DOCKER.md`.
+- **Frontend:** React 18 (Create React App), **TypeScript estrito** (`allowJs=false`, `strict`, `noImplicitReturns`, `noUnusedLocals`, `noUnusedParameters`, `noUncheckedIndexedAccess`; só `.ts`/`.tsx`), `axios`. Navegação por estado (`telaAtual` em `frontend/src/App.tsx`), sem router.
+- **Deploy:** Easypanel com Docker (`backend/Dockerfile` multi-stage com `tsc`, roda como `node`, com HEALTHCHECK; `frontend/Dockerfile` com build do CRA + nginx via `frontend/nginx.conf`). O `CMD` da API já roda `node database/migrate.js` e depois `exec node dist/server.js` (`RUN_MIGRATIONS=0` pula as migrations); com o builder Dockerfile o `CMD` vale (o Comando de Início do Easypanel é de Railpack/Nixpacks; não deixe um antigo sobrescrevendo). Front e API em hosts diferentes: `REACT_APP_API_URL` é variável do serviço web, que o Easypanel repassa como build arg (o Dockerfile declara o `ARG`) (ver `frontend/src/config.ts`). Guia: `docs/DEPLOY-DOCKER.md`.
 
 ## Comandos
 ```bash
@@ -18,6 +18,7 @@ cd backend && npm start      # node dist/server.js (precisa do build)
 cd backend && npm run start:prod   # migrate + node dist/server.js (equivale ao CMD da imagem Docker)
 docker compose up --build    # db + api + web locais (precisa de JWT_SECRET); ver docs/DEPLOY-DOCKER.md
 cd backend && npm test       # sobe o Postgres de teste (Docker) se preciso e roda Jest + Supertest (ver backend/test/README.md)
+cd frontend && npx tsc --noEmit   # typecheck do front (estrito)
 cd frontend && CI=true npm test
 cd e2e && npm test          # Playwright (Chromium) com Postgres real; ver e2e/README.md
 ```
@@ -34,8 +35,9 @@ Back em `:5000`, front em `:3000`. Variáveis em `backend/.env` (modelo: `backen
 - `backend/lib/boletosSemana.ts` — semana sábado–sexta, vencimento efetivo, tipo (testado em `backend/test/boletosSemana.test.js`).
 - `backend/database/migrations/` — `002` usuarios, `003_create_restaurantes`, `007` vínculo usuário↔restaurante, `013` flags de módulo, `014` boletos, `015` vínculos da regra nova, `016` rename do vínculo, `017` remove gastos/estoque e flags legadas.
 - `frontend/src/components/boletos/BoletosModulo.tsx|css` — tela de boletos, resumo semanal, metas.
-- `frontend/src/lib/boletosSemana.ts`, `frontend/src/lib/userPermissoes.js`.
-- `frontend/src/components/Login.js`, `AdminPermissoesUsuarios.tsx`, `CadastroRestaurantes.js`, `App.js`, `config.js`.
+- `frontend/src/lib/boletosSemana.ts`, `frontend/src/lib/userPermissoes.ts`, `frontend/src/lib/erros.ts` (`mensagemErro(error: unknown, fallback)`).
+- `frontend/src/types.ts` — tipos compartilhados da API (devem refletir `backend/routes` e `backend/lib/tipos.ts`).
+- `frontend/src/components/Login.tsx`, `AdminPermissoesUsuarios.tsx`, `CadastroRestaurantes.tsx`, `frontend/src/App.tsx`, `frontend/src/config.ts`.
 
 ## Regra de negócio de acesso (definida pelo dono do projeto)
 - **Admin:** acesso total e CRUD de tudo (restaurantes, usuários, permissões, boletos, metas) em todos os restaurantes.
@@ -56,7 +58,8 @@ Back em `:5000`, front em `:3000`. Variáveis em `backend/.env` (modelo: `backen
 - Não escreva migrations destrutivas (`DROP`) sem confirmar com o usuário (a 017 foi confirmada pelo dono em 21/10/2026). Faça backup antes de aplicá-las.
 - Sempre filtrar queries por `restaurante_id` e validar acesso com `assertBoletosAcessoRestaurante`.
 - Antes de mexer em auth, rode `cd backend && npm test`. O CI roda `typecheck` e `build` antes do Jest. O script sobe sozinho o Postgres de teste (container `pg-controle`, porta 5433); os testes só rodam em banco terminado em `_test`.
-- Mudanças em contrato de API: atualizar back e `BoletosModulo.tsx` na mesma tarefa.
+- Mudanças em contrato de API: atualizar back, `BoletosModulo.tsx` e `frontend/src/types.ts` na mesma tarefa.
+- Todo código novo do frontend é `.ts`/`.tsx`, sem `any` (nem implícito). Tipos da API ficam em `frontend/src/types.ts`, alinhados a `backend/routes` e `backend/lib/tipos.ts`.
 
 ## Agentes por camada (`.claude/agents/`)
 | Agente | Responsabilidade | Edita |
@@ -64,7 +67,7 @@ Back em `:5000`, front em `:3000`. Variáveis em `backend/.env` (modelo: `backen
 | `backend-api` | rotas, middlewares, regra de acesso | `backend/{routes,middleware,lib,db.ts,server.ts}` |
 | `database-migrations` | schema, migrations (DROP só com confirmação) | `backend/database/` |
 | `frontend-ui` | telas, componentes, axios | `frontend/src` |
-| `qa-tests` | **todos os testes**: unitários e de integração do back (Jest), front, Playwright; reporta bugs sem corrigir produção | `backend/test`, `e2e/`, `*.test.js` |
+| `qa-tests` | **todos os testes**: unitários e de integração do back (Jest), front, Playwright; reporta bugs sem corrigir produção | `backend/test`, `e2e/`, `*.test.ts(x)` do front |
 | `security-reviewer` | auditoria somente-leitura (IDOR, auth, segredos) | nada |
 | `devops-docs` | CI, Docker, deploy, documentação | `.github/`, Dockerfiles, `docs/`, `CLAUDE.md` |
 

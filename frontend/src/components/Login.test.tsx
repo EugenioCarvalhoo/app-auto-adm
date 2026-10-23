@@ -12,7 +12,6 @@ jest.mock('axios', () => ({
 
 jest.mock('../config', () => ({ API_URL: 'http://localhost:5000' }));
 
-import React from 'react';
 import { render, screen } from '@testing-library/react';
 import Login from './Login';
 

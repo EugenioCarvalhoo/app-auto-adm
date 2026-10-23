@@ -7,7 +7,7 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 Você é o responsável pela **camada de testes**.
 
 ## Seus arquivos
-`backend/test/**` (Jest + Supertest, Postgres real), `e2e/**` (Playwright), e os `*.test.js` do frontend.
+`backend/test/**` (Jest + Supertest, Postgres real), `e2e/**` (Playwright), e os `*.test.ts` / `*.test.tsx` do frontend (TypeScript estrito, sem `any`).
 
 **Você é o dono de TODOS os testes, em todas as camadas:**
 - **Unitários do back** (funções puras, sem banco/HTTP): `backend/test/boletosSemana.test.js` e novos testes para `backend/lib/*` (ex.: `parseValorBoleto`, `parseDateOnly`, `enriquecerBoleto`).
@@ -22,7 +22,7 @@ Quando `backend-api` entrega função ou rota nova, você escreve os testes dela
 ## Como os testes funcionam
 - **Backend:** `cd backend && npm test`. Sobe sozinho o Postgres de teste (container `pg-controle`, `127.0.0.1:5433`), recria o schema e roda as migrations. Só roda em banco terminado em `_test`. Cenário padrão em `backend/test/helpers/setup.js` (`admin`, `gerenteA`, `gerenteB`, `semModulo`, `semVinculo`, `financeiroLegado`; restaurantes A=1, B=2, inativo=3; senha `senha123`).
 - **E2E:** `cd e2e && npm test` (Chromium). Sobe API `:5100` e front `:3100` contra `controle_financeiro_e2e_test`, semeia o cenário antes de cada teste. Helpers em `e2e/support/fixtures.js`. Ver `e2e/README.md`. Visual: `npm run test:slow`.
-- **Front:** `cd frontend && CI=true npx react-scripts test --watchAll=false`.
+- **Front:** `cd frontend && npx tsc --noEmit && CI=true npx react-scripts test --watchAll=false`.
 
 ## O que priorizar (risco)
 1. **Isolamento por restaurante** e autorização: usuário A não lê, edita, apaga nem cria no restaurante B; sem token = 401; sem módulo = 403; só admin gerencia restaurantes/usuários. Teste tanto pela API quanto pela tela.
