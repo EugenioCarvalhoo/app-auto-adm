@@ -78,4 +78,4 @@ Mudou comando de início, porta, variável de ambiente, migration, `package.json
 
 ## Documentação
 Deploy e Docker: `docs/DEPLOY-DOCKER.md` (guia atual). Histórico das etapas já feitas, decisões e próximos passos: `docs/HISTORICO-ETAPAS.md` (leia primeiro ao retomar o trabalho).
-Os guias históricos de troubleshooting de deploy (época Nixpacks) ficam em `docs/deploy/` (ver o README de lá); só consulte se o problema for deploy. Homologação: `docs/HOMOLOGACAO.md`. Plano de limpeza (concluído, só histórico): `docs/PLANO-DE-ACAO.md`.
+Os guias `*_EASYPANEL.md` na raiz são históricos de troubleshooting de deploy; só consulte se o problema for deploy. Plano de limpeza: `docs/PLANO-DE-ACAO.md`.
