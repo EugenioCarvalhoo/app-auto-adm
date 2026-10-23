@@ -18,9 +18,7 @@ const MIGRATIONS = [
   '014_boletos_notas.sql',
   '015_vinculo_restaurantes_regra_admin.sql',
   '016_renomeia_vinculo_usuario_restaurantes.sql',
-  '017_remove_legado_gastos_estoque.sql',
-  '018_boleto_imagem_pagamento.sql',
-  '019_boletos_extracoes_uso.sql'
+  '017_remove_legado_gastos_estoque.sql'
 ];
 
 module.exports = { MIGRATIONS };

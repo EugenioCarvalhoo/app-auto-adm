@@ -12,12 +12,6 @@ export interface BoletoRow {
   descricao: string | null;
   valor: string | number;
   tipo: string | null;
-  fornecedor: string | null;
-  linha_digitavel: string | null;
-  pago: boolean;
-  pago_em: Date | null;
-  pago_por_usuario_id: number | null;
-  anexo_id: number | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -48,14 +42,6 @@ export interface BoletoEnriquecido {
   semana_chave: string | null;
   semana_inicio: string | null;
   semana_fim: string | null;
-  fornecedor: string | null;
-  linha_digitavel: string | null;
-  pago: boolean;
-  pago_em: Date | null;
-  pago_por_usuario_id: number | null;
-  /** id do anexo (imagem) mais recente, ou null. */
-  anexo_id: number | null;
-  tem_anexo: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -140,13 +126,6 @@ export function enriquecerBoleto(row: BoletoRow): BoletoEnriquecido {
     semana_chave: semana ? semana.chave : null,
     semana_inicio: semana ? semana.inicio : null,
     semana_fim: semana ? semana.fim : null,
-    fornecedor: row.fornecedor ?? null,
-    linha_digitavel: row.linha_digitavel ?? null,
-    pago: !!row.pago,
-    pago_em: row.pago_em ?? null,
-    pago_por_usuario_id: row.pago_por_usuario_id ?? null,
-    anexo_id: row.anexo_id ?? null,
-    tem_anexo: row.anexo_id != null,
     created_at: row.created_at,
     updated_at: row.updated_at
   };
@@ -166,12 +145,7 @@ export function enriquecerMeta(row: MetaRow): MetaEnriquecida {
   };
 }
 
-// Todas as consultas de boletos devem filtrar `deleted_at IS NULL` (soft delete). A subconsulta
-// de anexo_id referencia a tabela por nome: use BOLETO_SELECT só em consultas FROM boletos_notas (sem alias).
-export const BOLETO_SELECT = `id, restaurante_id, usuario_id, dt_recebimento, dt_vencimento, descricao, valor, tipo,
-  fornecedor, linha_digitavel, pago, pago_em, pago_por_usuario_id,
-  (SELECT a.id FROM boletos_anexos a WHERE a.boleto_id = boletos_notas.id ORDER BY a.id DESC LIMIT 1) AS anexo_id,
-  created_at, updated_at`;
+export const BOLETO_SELECT = `id, restaurante_id, usuario_id, dt_recebimento, dt_vencimento, descricao, valor, tipo, created_at, updated_at`;
 export const META_SELECT = `id, restaurante_id, data_referencia, semana_chave, semana_inicio, semana_fim, maximo_gasto, created_at, updated_at`;
 
 export function parseDateOnly(s: unknown): string | null {

@@ -1,45 +1,6 @@
 const base = require('@playwright/test');
 const { semearCenario, rows, dataIso } = require('./db');
-const path = require('path');
-const { SENHA, API_URL, minio } = require('./env');
-
-const backendModulo = (...partes) => require(path.join(__dirname, '..', '..', 'backend', ...partes));
-const { minioAcessivel } = backendModulo('test', 'helpers', 'minio.js');
-const { S3Client, HeadObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand } = backendModulo('node_modules', '@aws-sdk', 'client-s3');
-
-const s3 = new S3Client({
-  endpoint: minio.endpoint,
-  region: minio.region,
-  forcePathStyle: true,
-  credentials: { accessKeyId: minio.accessKey, secretAccessKey: minio.secretKey }
-});
-
-/** true se o MinIO de teste está no ar (os cenários com imagem real pulam quando não está). */
-const minioPronto = () => minioAcessivel(minio);
-
-/** Bytes do objeto no MinIO, ou null se não existir. */
-async function objetoNoMinio(chave) {
-  try {
-    await s3.send(new HeadObjectCommand({ Bucket: minio.bucket, Key: chave }));
-  } catch (e) {
-    if (e.$metadata && e.$metadata.httpStatusCode === 404) return null;
-    throw e;
-  }
-  const r = await s3.send(new GetObjectCommand({ Bucket: minio.bucket, Key: chave }));
-  return Buffer.from(await r.Body.transformToByteArray());
-}
-
-/** Apaga todos os objetos do bucket de teste (o E2E recria o banco a cada teste, então nada fica referenciado). */
-async function limparBucket() {
-  const r = await s3.send(new ListObjectsV2Command({ Bucket: minio.bucket }));
-  for (const o of r.Contents || []) await s3.send(new DeleteObjectCommand({ Bucket: minio.bucket, Key: o.Key }));
-}
-
-/** Quantidade de objetos do restaurante no bucket (prefixo "<id>/"). */
-async function contarObjetos(restauranteId) {
-  const r = await s3.send(new ListObjectsV2Command({ Bucket: minio.bucket, Prefix: `${restauranteId}/` }));
-  return r.KeyCount || 0;
-}
+const { SENHA, API_URL } = require('./env');
 
 /** `test` com o banco semeado do zero antes de cada teste. */
 const test = base.test.extend({
@@ -100,4 +61,4 @@ async function lancar(page, { descricao, valor, vencimento, recebimento = dataIs
   await form.locator('[data-boleto-salvar]').click();
 }
 
-module.exports = { minioPronto, objetoNoMinio, contarObjetos, limparBucket, test, expect: base.expect, entrar, escolherRestaurante, tokenDe, abaNav, abrirCadastro, abrirResumo, lancar, rows, dataIso };
+module.exports = { test, expect: base.expect, entrar, escolherRestaurante, tokenDe, abaNav, abrirCadastro, abrirResumo, lancar, rows, dataIso };

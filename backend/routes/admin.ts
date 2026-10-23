@@ -12,7 +12,6 @@ interface UsuarioPermissoesRow {
   nome: string;
   is_admin: boolean | null;
   modulo_boletos: boolean | null;
-  pode_marcar_pago: boolean | null;
 }
 
 const router = express.Router();
@@ -48,15 +47,14 @@ router.get('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, as
   try {
     const result = await pool.query<UsuarioPermissoesRow>(
       `SELECT u.id, u.username, u.nome, u.is_admin,
-        COALESCE(u.modulo_boletos, false) AS modulo_boletos,
-        COALESCE(u.pode_marcar_pago, false) AS pode_marcar_pago
+        COALESCE(u.modulo_boletos, false) AS modulo_boletos
        FROM usuarios u
        ORDER BY u.is_admin DESC, u.nome ASC`
     );
     const rows = [];
     for (const row of result.rows) {
       const flags = row.is_admin
-        ? { ...row, modulo_boletos: true, pode_marcar_pago: true }
+        ? { ...row, modulo_boletos: true }
         : row;
       const restaurante_ids = await listarRestauranteIdsUsuario(row.id);
       rows.push({
@@ -65,14 +63,13 @@ router.get('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, as
         nome: flags.nome,
         is_admin: !!flags.is_admin,
         modulo_boletos: !!flags.modulo_boletos,
-        pode_marcar_pago: !!flags.pode_marcar_pago,
         restaurante_ids
       });
     }
     res.json(rows);
   } catch (error) {
     if (codigoErro(error) === '42703') {
-      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
+      return res.status(503).json({ error: 'Migração de permissões pendente (014).' });
     }
     console.error('Erro ao listar permissões:', error);
     if (ehTabelaInexistente(error)) {
@@ -100,7 +97,6 @@ router.post('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, a
     }
 
     const moduloBoletos = body.modulo_boletos === true;
-    const podeMarcarPago = body.pode_marcar_pago === true;
     if (!moduloBoletos) {
       return res.status(400).json({ error: 'Marque ao menos um módulo para o usuário.' });
     }
@@ -123,10 +119,10 @@ router.post('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, a
     const hash = await bcrypt.hash(password, 10);
     await client.query('BEGIN');
     const ins = await client.query<{ id: number; username: string; nome: string }>(
-      `INSERT INTO usuarios (username, password, nome, is_admin, modulo_boletos, pode_marcar_pago)
-       VALUES ($1, $2, $3, false, $4, $5)
+      `INSERT INTO usuarios (username, password, nome, is_admin, modulo_boletos)
+       VALUES ($1, $2, $3, false, $4)
        RETURNING id, username, nome`,
-      [username, hash, nome, moduloBoletos, podeMarcarPago]
+      [username, hash, nome, moduloBoletos]
     );
     const newUser = ins.rows[0];
     let ids: number[] = [];
@@ -144,13 +140,12 @@ router.post('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, a
       nome: newUser.nome,
       is_admin: false,
       modulo_boletos: moduloBoletos,
-      pode_marcar_pago: podeMarcarPago,
       restaurante_ids: ids
     });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     if (codigoErro(error) === '42703') {
-      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
+      return res.status(503).json({ error: 'Migração de permissões pendente (014).' });
     }
     if (codigoErro(error) === '23505') {
       return res.status(409).json({ error: 'Já existe usuário com este login.' });
@@ -187,11 +182,6 @@ router.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin
       return res.status(400).json({ error: 'Informe modulo_boletos (true ou false).' });
     }
     const moduloBoletos = body.modulo_boletos;
-    // Opcional: se omitido, mantém o valor atual.
-    if (body.pode_marcar_pago !== undefined && typeof body.pode_marcar_pago !== 'boolean') {
-      return res.status(400).json({ error: 'pode_marcar_pago deve ser true ou false.' });
-    }
-    const podeMarcarPago: boolean | null = typeof body.pode_marcar_pago === 'boolean' ? body.pode_marcar_pago : null;
 
     const restrito = true; // todo usuário não-admin precisa de restaurantes liberados
     let restauranteIds: number[] = [];
@@ -207,14 +197,12 @@ router.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin
     }
 
     await client.query('BEGIN');
-    const upd = await client.query<{ pode_marcar_pago: boolean | null }>(
+    await client.query(
       `UPDATE usuarios
        SET modulo_boletos = $1,
-           pode_marcar_pago = COALESCE($3::boolean, pode_marcar_pago),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2
-       RETURNING pode_marcar_pago`,
-      [moduloBoletos, userId, podeMarcarPago]
+       WHERE id = $2`,
+      [moduloBoletos, userId]
     );
 
     if (restrito) {
@@ -232,13 +220,12 @@ router.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin
       nome: usuario.nome,
       is_admin: false,
       modulo_boletos: moduloBoletos,
-      pode_marcar_pago: !!upd.rows[0]?.pode_marcar_pago,
       restaurante_ids: restauranteIds
     });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     if (codigoErro(error) === '42703') {
-      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
+      return res.status(503).json({ error: 'Migração de permissões pendente (014).' });
     }
     console.error('Erro ao atualizar permissões:', error);
     if (ehTabelaInexistente(error)) {
@@ -279,63 +266,6 @@ router.delete('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAd
       return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
     }
     res.status(500).json({ error: 'Erro ao remover usuário' });
-  }
-});
-
-// ========== Admin: ocorrências de boletos (ex.: linha digitável duplicada) ==========
-
-router.get('/api/admin/boletos-ocorrencias', authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const todas = req.query.todas === '1' || req.query.todas === 'true';
-    const result = await pool.query(
-      `SELECT o.id, o.tipo, o.usuario_id, u.nome AS usuario_nome, u.username AS usuario_username,
-              o.restaurante_id, r.nome AS restaurante_nome,
-              o.boleto_existente_id, b.restaurante_id AS boleto_existente_restaurante_id,
-              rb.nome AS boleto_existente_restaurante_nome, b.fornecedor AS boleto_existente_fornecedor,
-              o.linha_digitavel, o.visto_em, o.visto_por_usuario_id, o.created_at
-       FROM boletos_ocorrencias o
-       LEFT JOIN usuarios u ON u.id = o.usuario_id
-       LEFT JOIN restaurantes r ON r.id = o.restaurante_id
-       LEFT JOIN boletos_notas b ON b.id = o.boleto_existente_id
-       LEFT JOIN restaurantes rb ON rb.id = b.restaurante_id
-       ${todas ? '' : 'WHERE o.visto_em IS NULL'}
-       ORDER BY o.created_at DESC, o.id DESC
-       LIMIT 200`
-    );
-    res.json(result.rows);
-  } catch (error) {
-    if (ehTabelaInexistente(error)) {
-      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
-    }
-    console.error('Erro ao listar ocorrências de boletos:', error);
-    res.status(500).json({ error: 'Erro ao listar ocorrências' });
-  }
-});
-
-router.post('/api/admin/boletos-ocorrencias/:id/visto', authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    if (Number.isNaN(id)) {
-      return res.status(400).json({ error: 'id inválido' });
-    }
-    const result = await pool.query(
-      `UPDATE boletos_ocorrencias
-       SET visto_em = COALESCE(visto_em, CURRENT_TIMESTAMP),
-           visto_por_usuario_id = COALESCE(visto_por_usuario_id, $2)
-       WHERE id = $1
-       RETURNING id, visto_em, visto_por_usuario_id`,
-      [id, req.user!.id]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Ocorrência não encontrada' });
-    }
-    res.json(result.rows[0]);
-  } catch (error) {
-    if (ehTabelaInexistente(error)) {
-      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
-    }
-    console.error('Erro ao marcar ocorrência como vista:', error);
-    res.status(500).json({ error: 'Erro ao marcar ocorrência como vista' });
   }
 });
 

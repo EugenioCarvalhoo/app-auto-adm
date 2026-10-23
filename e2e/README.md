@@ -34,7 +34,6 @@ Variáveis: `E2E_DB_NAME`, `E2E_API_PORT`, `E2E_WEB_PORT`, `TEST_DB_HOST/PORT/US
 | `boletos.spec.js` | cadastrar, editar, excluir (e recusar), validações, dashboard semanal e troca de restaurante |
 | `metas.spec.js` | meta pela aba e pelo card da semana, saldo, exclusão |
 | `admin.spec.js` | Início, cadastro de restaurante, criação de usuário (e login dele), restaurante obrigatório |
-| `ia-pagamento.spec.js` | celular 375x667 (Ler com IA com `/boletos/extrair` mockado, não lidos, tipo null, repetida, 502/429), desktop sem IA, lançamento parecido, linha duplicada, pagar/desfazer, checkbox `pode_marcar_pago`, ocorrências, sem rolagem horizontal |
 | `api-isolamento.spec.js` | 401/403 direto na API: leitura, edição, exclusão e criação em restaurante alheio, rotas de admin |
 
 ## Dicas

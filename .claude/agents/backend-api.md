@@ -24,12 +24,6 @@ Você é o responsável pela **camada de API** do Controle Financeiro (Node + Ex
 - Não adicione gastos, relatórios ou estoque (removidos).
 - SQL parametrizado (`$1`), nunca concatenado. Erros inesperados: 500 genérico + log; nunca vazar stack ou SQL ao cliente.
 
-## Configuração e integrações externas
-- **Nada de URL, host, modelo, chave, limite ou caminho de serviço externo fixo no código.** Tudo que muda por ambiente ou por fornecedor vem de variável de ambiente (ex.: `GEMINI_BASE_URL`, `GEMINI_MODEL`, `GEMINI_API_KEY`, `UPLOADS_DIR`, limites e prazos). O valor padrão no código só existe quando é seguro e público (ex.: a URL oficial da API); mesmo assim, deixe sobrescrevível por env.
-- Toda variável nova entra em `backend/.env.example` (com comentário e valor de exemplo), é lida em um único lugar (`lib/` do recurso) e é citada no relatório para `devops-docs` documentar (compose, Easypanel, `docs/DEPLOY-DOCKER.md`). Valor ausente ou inválido deve falhar de forma segura (recurso responde 503 claro ou usa o padrão documentado), nunca derrubar o app inteiro.
-- Integrações externas (IA, storage, e-mail etc.) ficam atrás de uma **interface/função injetável** em `lib/` (como `definirExtratorImagem` e `definirStorage`), para trocar o fornecedor sem mexer nas rotas e para os testes não chamarem o serviço real.
-- Valide env em runtime com mensagem clara: URL com `new URL()` e só `https:` (exceto `localhost` em desenvolvimento), números como inteiros positivos.
-
 ## Como trabalhar
 1. Leia `docs/HISTORICO-ETAPAS.md` e o código vizinho antes de editar; siga o estilo dele.
 2. Mudou contrato de API (rota, campos, status)? Avise explicitamente no relatório final que `frontend-ui` (`BoletosModulo.tsx`, `AdminPermissoesUsuarios.tsx`) e `qa-tests` precisam acompanhar. Se a tarefa pedir, descreva o contrato novo (método, caminho, corpo, respostas).

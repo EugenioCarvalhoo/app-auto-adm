@@ -6,7 +6,6 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { Pool } = require('pg');
 const { dbConfig } = require('./helpers/dbConfig');
-const { configMinio, minioAcessivel, garantirBucket } = require('./helpers/minio');
 
 module.exports = async () => {
   const cfg = dbConfig();
@@ -36,19 +35,5 @@ module.exports = async () => {
   });
   if (migrate.status !== 0) {
     throw new Error(`Falha ao aplicar migrations no banco de teste:\n${migrate.stdout}\n${migrate.stderr}`);
-  }
-
-  // MinIO de teste: opcional. Se estiver no ar, garante o bucket; se não, os testes que o usam PULAM (com aviso).
-  process.env.TEST_MINIO_OK = '0';
-  const minio = configMinio();
-  if (await minioAcessivel(minio)) {
-    try {
-      await garantirBucket(minio);
-      process.env.TEST_MINIO_OK = '1';
-    } catch (err) {
-      console.warn(`[minio] bucket de teste indisponível (${err.message}); testes de MinIO serão PULADOS.`);
-    }
-  } else {
-    console.warn(`[minio] MinIO de teste fora do ar em ${minio.endpoint}; testes de MinIO serão PULADOS (veja backend/test/README.md).`);
   }
 };
