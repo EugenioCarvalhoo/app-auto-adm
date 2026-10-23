@@ -21,7 +21,7 @@ node database/migrate.js && exec node dist/server.js
 - A `migrate.js` é idempotente (registra as aplicadas em `schema_migrations`), então rodar a cada boot é seguro. Se a migration falhar, o container sai e a API não sobe.
 - `RUN_MIGRATIONS=0` pula as migrations (o container só inicia a API).
 - O `exec` deixa o Node como PID 1, que recebe o `SIGTERM` e encerra com graciosidade.
-- No Easypanel com Dockerfile, deixe o campo **Comando de Início vazio** para usar o `CMD`. Se preencher, use `npm run start:prod` (equivalente) ou `npm start` (sem migration). **Nunca** `node server.js`: o arquivo não existe mais.
+- Com o builder **Dockerfile**, quem manda é o `CMD` da imagem: a documentação do Easypanel só descreve o campo "Comando de Início" para Railpack e Nixpacks. Se um comando antigo (ex.: `node server.js`) ficou de quando o serviço usava Nixpacks, confira na tela do serviço que ele não está sobrescrevendo o `CMD`; para a API ele deve ficar vazio ou ser `npm run start:prod`. **Nunca** `node server.js`: o arquivo não existe mais.
 
 ### Variáveis de ambiente da API
 | Variável | Obrigatória | Observação |
@@ -34,7 +34,8 @@ node database/migrate.js && exec node dist/server.js
 
 ### URL da API no front (`REACT_APP_API_URL`)
 O CRA embute `REACT_APP_*` no JavaScript **na hora do build**. Variável de ambiente do container em runtime não muda nada.
-- No Easypanel, defina `REACT_APP_API_URL` como **build arg** do serviço web, com a URL pública da API **terminando em `/api`**, ex.: `https://api.exemplo.com/api`. Mudou a URL, refaça o build.
+- No Easypanel, o Buildx passa as variáveis do serviço como build args, e o Dockerfile só recebe as que declara com `ARG` (o `frontend/Dockerfile` declara `REACT_APP_API_URL`). Então crie `REACT_APP_API_URL` nas **variáveis de ambiente do serviço web**, com a URL pública da API **terminando em `/api`**, ex.: `https://api.exemplo.com/api`. Mudou a URL, refaça o deploy com **Force Rebuild** (o cache do Docker pode reaproveitar o bundle antigo).
+- Build args não são mecanismo de segredo: só ponha aqui a URL pública, nunca senha ou token.
 - Sem ela, `frontend/src/config.js` deduz o host a partir do hostname (padrão `financialmanagement` para `financialmanagementapp` em `easypanel.host`); fora desse padrão a API não é encontrada.
 
 ## Rodar tudo localmente com Docker
@@ -56,8 +57,8 @@ O `docker-compose.yml` serve só para isso; o Easypanel não o usa.
 ## Easypanel: passo a passo
 
 1. **Postgres:** crie o serviço de banco e o database.
-2. **API:** novo serviço "App" a partir do GitHub, **Build: Dockerfile**, contexto `backend`. Variáveis da tabela acima. Domínio apontando para a porta `5000`.
-3. **Web:** novo serviço "App", **Build: Dockerfile**, contexto `frontend`. Build arg `REACT_APP_API_URL`. Domínio apontando para a porta `80`.
+2. **API:** novo serviço "App" a partir do GitHub, **Build: Dockerfile**, Variáveis da tabela acima. Domínio apontando para a porta `5000`. **Build Path** `/backend` (é também o contexto do build; o Dockerfile não copia nada de fora dele).
+3. **Web:** novo serviço "App", **Build: Dockerfile**, **Build Path** `/frontend`. Variável `REACT_APP_API_URL` (ver acima). Domínio apontando para a porta `80`.
 4. **Primeira vez:** abra o terminal da API e rode `node database/create_admin.js` para criar o admin; troque a senha em seguida.
 5. **Deploy por CI:** o `.github/workflows/ci-deploy.yml` dispara os webhooks de deploy depois dos testes (ver `docs/HISTORICO-ETAPAS.md`). Desligue o deploy automático por push no Easypanel.
 
@@ -67,6 +68,11 @@ O `docker-compose.yml` serve só para isso; o Easypanel não o usa.
 
 ## Verificado (23/10/2026)
 `docker compose up --build` (Docker 27 no WSL): as três imagens constroem; a API aplica as 17 migrations e sobe como `healthy`; `GET /api/health` e `/api/health/ready` respondem 200; o web responde 200 e devolve `index.html` em rotas desconhecidas (fallback de SPA); `POST /api/login` com credencial inválida devolve 401; `create_admin.js` roda dentro do container; `docker stop` encerra a API com graciosidade em cerca de 1 s. Não testado: login e fluxo de boletos pela interface, e o deploy real no Easypanel.
+
+## Pontos em aberto frente à documentação do Easypanel (builder Dockerfile)
+- **`HEALTHCHECK` no Dockerfile:** a página do builder não fala de healthcheck, então não confirmei como o Easypanel o trata. No Docker funciona (containers `healthy`). Se a API for reiniciada em loop no primeiro deploy, suspeite de migrations que passam de ~2 min (40 s de `start-period` + 3 tentativas de 30 s) e aumente o `--start-period`.
+- **Porta e domínio:** não constam nessa página; a porta do domínio é configurada na tela do serviço.
+- **Imagens base sem versão fixa:** a documentação recomenda fixar versão ou digest das imagens base; hoje são `node:18-alpine` e `nginx:alpine`.
 
 ## Pendência
 As imagens base são `node:18-alpine` (Node 18 saiu de suporte) e `nginx:alpine`; o IDE aponta vulnerabilidades nelas. Subir a base exige alinhar `@types/node`, o CI (`node-version: 18`) e testar o CRA, então ficou fora desta mudança.
