@@ -5,7 +5,7 @@ Sistema web para restaurantes. Escopo ativo: **(1) cadastro de boletos/notas com
 ## Stack
 - **Backend:** Node + Express 4 em **TypeScript** (compilado com `tsc` para `backend/dist/`), PostgreSQL (`pg`, SQL direto, sem ORM), JWT (`jsonwebtoken`), `bcryptjs`. `backend/server.ts` só monta o app; o resto fica em `routes/`, `middleware/`, `lib/` e `db.ts`. `typescript` fica fixado em `~5.9` (7.x quebra `moduleResolution: node`); não suba sem ajustar o `tsconfig.json`. `database/` (migrate, create_admin) e `scripts/` continuam JS.
 - **Frontend:** React 18 (Create React App), mistura de `.js` e `.tsx`, `axios`. Navegação por estado (`telaAtual` em `frontend/src/App.js`), sem router.
-- **Deploy:** Easypanel (Dockerfile em `backend/` — multi-stage com `tsc` — e `frontend/`). Comando de início da API: `npm run start:prod` (migrations + `node dist/server.js`); sem migration automática: `npm start` (`node dist/server.js`). Front e API em hosts diferentes (ver `frontend/src/config.js`).
+- **Deploy:** Easypanel com Docker (`backend/Dockerfile` multi-stage com `tsc`, roda como `node`, com HEALTHCHECK; `frontend/Dockerfile` com build do CRA + nginx via `frontend/nginx.conf`). O `CMD` da API já roda `node database/migrate.js` e depois `exec node dist/server.js` (`RUN_MIGRATIONS=0` pula as migrations); deixe o Comando de Início vazio no Easypanel, ou use `npm run start:prod`. Front e API em hosts diferentes: `REACT_APP_API_URL` entra como **build arg** do front (ver `frontend/src/config.js`). Guia: `docs/DEPLOY-DOCKER.md`.
 
 ## Comandos
 ```bash
@@ -15,7 +15,8 @@ npm run migrate              # aplica backend/database/migrations
 npm run create-admin         # cria usuário admin
 cd backend && npm run typecheck && npm run build   # tsc --noEmit / compila para dist/
 cd backend && npm start      # node dist/server.js (precisa do build)
-cd backend && npm run start:prod   # migrate + node dist/server.js (usado no Easypanel)
+cd backend && npm run start:prod   # migrate + node dist/server.js (equivale ao CMD da imagem Docker)
+docker compose up --build    # db + api + web locais (precisa de JWT_SECRET); ver docs/DEPLOY-DOCKER.md
 cd backend && npm test       # sobe o Postgres de teste (Docker) se preciso e roda Jest + Supertest (ver backend/test/README.md)
 cd frontend && CI=true npm test
 cd e2e && npm test          # Playwright (Chromium) com Postgres real; ver e2e/README.md
@@ -66,6 +67,9 @@ Back em `:5000`, front em `:3000`. Variáveis em `backend/.env` (modelo: `backen
 
 Fluxo para mudança que atravessa camadas: `database-migrations` (schema) → `backend-api` (contrato) → `frontend-ui` (mesma tarefa, conforme "Regras para o Claude") → `qa-tests` (cobertura) → `security-reviewer` (se mexeu em auth/acesso) → `devops-docs` (docs/CI). Cada agente devolve ao dono da camada o que está fora do seu escopo.
 
+## Docker faz parte do requisito
+Mudou comando de início, porta, variável de ambiente, migration, `package.json` ou o build do front? Atualize `backend/Dockerfile`, `frontend/Dockerfile`, `docker-compose.yml` e `docs/DEPLOY-DOCKER.md` na mesma tarefa, e valide com `docker compose up --build` (o CI só confere o `docker build`).
+
 ## Documentação
-Histórico das etapas já feitas, decisões e próximos passos: `docs/HISTORICO-ETAPAS.md` (leia primeiro ao retomar o trabalho).
+Deploy e Docker: `docs/DEPLOY-DOCKER.md` (guia atual). Histórico das etapas já feitas, decisões e próximos passos: `docs/HISTORICO-ETAPAS.md` (leia primeiro ao retomar o trabalho).
 Os guias `*_EASYPANEL.md` na raiz são históricos de troubleshooting de deploy; só consulte se o problema for deploy. Plano de limpeza: `docs/PLANO-DE-ACAO.md`.

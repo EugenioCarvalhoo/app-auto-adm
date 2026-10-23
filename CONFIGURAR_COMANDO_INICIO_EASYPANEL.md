@@ -1,3 +1,5 @@
+> **Desatualizado:** este guia histórico cita `node server.js`/Nixpacks, que não existem mais. O deploy atual usa Docker: veja [docs/DEPLOY-DOCKER.md](docs/DEPLOY-DOCKER.md).
+
 # ⚙️ Configurar Comando de Início no Easypanel
 
 Você está usando **Nixpacks** para build. Precisamos configurar o **Comando de Início**.

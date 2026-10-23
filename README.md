@@ -1,123 +1,71 @@
-# Sistema de Controle Financeiro - Restaurante
+# Controle Financeiro — Boletos/Notas
 
-Sistema simples de controle de gastos para gerenciamento de restaurante, desenvolvido com React (frontend) e Node.js (backend) usando PostgreSQL como banco de dados.
+Sistema web para restaurantes: cadastro de boletos e notas com dashboard semanal e metas, e autenticação com separação por restaurante.
 
-## Características
+- **Admin:** acesso total (restaurantes, usuários, permissões, boletos, metas).
+- **Demais usuários:** só o que o admin liberar — o módulo de boletos **e** cada restaurante vinculado.
 
-- Grid editável similar ao Excel para lançamento de gastos
-- Interface responsiva para desktop e mobile
-- Campos: Data, Descrição, Valor, Observação, Pago
-- CRUD completo de gastos
-- Banco de dados PostgreSQL
+Regras detalhadas e arquitetura: [CLAUDE.md](./CLAUDE.md). Histórico das etapas: [docs/HISTORICO-ETAPAS.md](./docs/HISTORICO-ETAPAS.md).
+
+## Tecnologias
+- **Backend:** Node, Express 4, TypeScript, PostgreSQL (`pg`), JWT.
+- **Frontend:** React 18 (Create React App), axios.
+- **Entrega:** Docker (uma imagem para a API, outra para o front com nginx), Easypanel, GitHub Actions.
 
 ## Pré-requisitos
+- Node.js 18+
+- PostgreSQL 12+ (ou Docker)
 
-- Node.js (v14 ou superior)
-- PostgreSQL (v12 ou superior)
-- npm ou yarn
-
-## Instalação
-
-1. Clone o repositório ou navegue até a pasta do projeto
-
-2. Instale as dependências do backend e frontend:
+## Rodar em desenvolvimento
 ```bash
-npm run install-all
+npm run install-all          # raiz + frontend + e2e
+cd backend && npm install    # o backend tem package.json próprio (inclui as devDependencies)
 ```
 
-3. Configure o banco de dados PostgreSQL:
-   - Crie um banco de dados chamado `controle_financeiro`
-   - Copie o arquivo `backend/env.example` para `backend/.env`
-   - Edite `backend/.env` com suas credenciais do PostgreSQL
-
-4. Execute as migrations:
+Crie o banco `controle_financeiro` e o arquivo de variáveis:
 ```bash
+cp backend/.env.example backend/.env     # Windows: Copy-Item backend\.env.example backend\.env
+# edite DB_* e JWT_SECRET
 npm run migrate
+npm run create-admin                     # admin / admin123 — troque a senha
+npm run dev                              # API em :5000 e front em :3000
 ```
 
-## Executando o Projeto
+Detalhes e solução de problemas: [setup.md](./setup.md).
 
-Para executar o backend e frontend simultaneamente:
+## Rodar com Docker
 ```bash
-npm run dev
+export JWT_SECRET=$(openssl rand -hex 32)
+docker compose up --build                # front em :8080, API em :5000
+docker compose exec api node database/create_admin.js
 ```
-
-Ou execute separadamente:
-
-Backend (porta 5000):
-```bash
-npm run server
-```
-
-Frontend (porta 3000):
-```bash
-npm run client
-```
+Imagens, variáveis, `REACT_APP_API_URL` e passo a passo do Easypanel: [docs/DEPLOY-DOCKER.md](./docs/DEPLOY-DOCKER.md).
 
 ## Testes
-
-Testes unitários e de integração leve (Jest no backend, Testing Library no frontend). Detalhes e comandos: **[TESTING.md](./TESTING.md)**.
-
-## Estrutura do Projeto
-
+```bash
+cd backend && npm test                   # Jest + Supertest com Postgres real (Docker)
+cd frontend && CI=true npm test
+cd e2e && npm test                       # Playwright
 ```
-controlefinanceiro/
+Veja [TESTING.md](./TESTING.md).
+
+## Estrutura
+```
 ├── backend/
-│   ├── server.js              # Servidor Express
-│   ├── database/
-│   │   ├── migrate.js         # Script de migração
-│   │   └── migrations/
-│   │       └── 001_create_gastos_table.sql
-│   └── .env.example
+│   ├── server.ts            # monta o Express
+│   ├── db.ts                # pool do Postgres
+│   ├── routes/              # auth, restaurantes, boletos, admin, health
+│   ├── middleware/          # auth (JWT) e permissoes
+│   ├── lib/                 # boletos, boletosSemana, erros, tipos, loadEnv
+│   ├── database/            # migrate.js, create_admin.js, migrations/
+│   ├── test/                # Jest + Supertest
+│   └── Dockerfile
 ├── frontend/
-│   ├── src/
-│   │   ├── App.js             # Componente principal
-│   │   ├── App.css
-│   │   ├── components/
-│   │   │   ├── GridEditavel.js    # Grid editável
-│   │   │   └── GridEditavel.css
-│   │   ├── index.js
-│   │   └── index.css
-│   └── public/
-│       └── index.html
-├── package.json
-└── README.md
+│   ├── src/                 # App.js, components/ (boletos, login, admin), lib/
+│   ├── nginx.conf
+│   └── Dockerfile
+├── e2e/                     # Playwright
+├── docs/                    # histórico, plano de ação, deploy com Docker
+├── docker-compose.yml       # stack local (db + api + web)
+└── .github/workflows/       # CI e deploy
 ```
-
-## Uso
-
-1. Acesse `http://localhost:3000` no navegador
-2. Clique em qualquer célula para editar
-3. Pressione Enter ou clique fora para salvar
-4. Use Tab para navegar entre campos
-5. Clique no botão "×" para deletar uma linha
-6. Use o botão "+ Adicionar Linha" para criar novos registros
-
-## API Endpoints
-
-- `GET /api/gastos` - Lista todos os gastos
-- `GET /api/gastos/:id` - Busca um gasto específico
-- `POST /api/gastos` - Cria um novo gasto
-- `PUT /api/gastos/:id` - Atualiza um gasto
-- `DELETE /api/gastos/:id` - Deleta um gasto
-- `PUT /api/gastos/bulk` - Atualiza múltiplos gastos
-
-## Banco de Dados
-
-A tabela `gastos` possui os seguintes campos:
-- `id` (SERIAL PRIMARY KEY)
-- `data` (DATE)
-- `descricao` (VARCHAR(255))
-- `valor` (DECIMAL(10,2))
-- `observacao` (TEXT)
-- `pago` (BOOLEAN)
-- `created_at` (TIMESTAMP)
-- `updated_at` (TIMESTAMP)
-
-## Tecnologias Utilizadas
-
-- **Frontend**: React, CSS3
-- **Backend**: Node.js, Express
-- **Banco de Dados**: PostgreSQL
-- **HTTP Client**: Axios
-

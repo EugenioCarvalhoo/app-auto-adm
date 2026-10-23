@@ -1,3 +1,5 @@
+> **Desatualizado:** este guia histórico cita `node server.js`/Nixpacks, que não existem mais. O deploy atual usa Docker: veja [docs/DEPLOY-DOCKER.md](docs/DEPLOY-DOCKER.md).
+
 # 🔗 Conectar Repositório GitHub Privado ao Easypanel
 
 Este guia mostra como autorizar o Easypanel a acessar seu repositório GitHub privado e fazer o deploy.

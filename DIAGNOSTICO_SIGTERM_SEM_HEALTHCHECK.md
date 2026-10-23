@@ -1,3 +1,5 @@
+> **Desatualizado:** este guia histórico cita `node server.js`/Nixpacks, que não existem mais. O deploy atual usa Docker: veja [docs/DEPLOY-DOCKER.md](docs/DEPLOY-DOCKER.md).
+
 # 🔍 Diagnóstico SIGTERM sem Health Check
 
 Não há opção de Health Check no Easypanel. O problema pode ser outra coisa.

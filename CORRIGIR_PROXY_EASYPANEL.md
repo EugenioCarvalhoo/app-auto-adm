@@ -1,3 +1,5 @@
+> **Desatualizado:** este guia histórico cita `node server.js`/Nixpacks, que não existem mais. O deploy atual usa Docker: veja [docs/DEPLOY-DOCKER.md](docs/DEPLOY-DOCKER.md).
+
 # 🔧 Corrigir Proxy/Domínio no Easypanel
 
 A API funciona localmente, então o problema é na configuração do proxy/domínio.

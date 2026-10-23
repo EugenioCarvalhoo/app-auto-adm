@@ -116,6 +116,14 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
 - Migrar: `cd backend && npm run migrate` (com as variáveis exportadas). Antes, confirme que `DB_NAME` é o de homologação.
 - Observação: o Claude Code no WSL tem um diretório de memória e de projeto diferente do Windows. Este arquivo e o `CLAUDE.md` são a fonte de contexto que acompanha o repositório.
 
+## 8. Docker atualizado (23/10/2026)
+- `backend/Dockerfile`: `NODE_ENV=production`, usuário `node`, `HEALTHCHECK` em `/api/health`, e `CMD` que roda `database/migrate.js` e depois `exec node dist/server.js` (`RUN_MIGRATIONS=0` pula). Antes o `CMD` só iniciava a API, sem migration.
+- `frontend/Dockerfile`: `npm ci` (antes `npm install`), `nginx.conf` em arquivo próprio (cache longo em `/static/`, `index.html` sem cache, gzip), `HEALTHCHECK`. Novo `frontend/.dockerignore`; `backend/.dockerignore` ampliado.
+- Novo `docker-compose.yml` (db + api + web) para validar as imagens localmente. Novo guia `docs/DEPLOY-DOCKER.md`.
+- Validado com `docker compose up --build` no WSL: 17 migrations aplicadas, API e web `healthy`, health 200, fallback de SPA, login inválido 401, `create_admin.js` no container, SIGTERM gracioso (~1 s). Não testado: fluxo de boletos pela interface e o deploy real no Easypanel.
+- Docs: `README.md`, `TESTING.md` e `setup.md` reescritos para o projeto atual (sem gastos/estoque); removido `backend/env.example` (duplicava `.env.example`, com senha de exemplo); aviso de "desatualizado" nos 9 guias `*_EASYPANEL.md` que citam `node server.js`.
+- Pendente: imagens base `node:18-alpine` e `nginx:alpine` com vulnerabilidades apontadas pelo IDE (Node 18 sem suporte); subir exige ajustar `@types/node`, o CI e testar o CRA.
+
 ## 7. Migração do backend para TypeScript (21/10/2026)
 - `server`, `db`, `routes/*`, `middleware/*`, `lib/*` agora são `.ts`; novos: `lib/tipos.ts`, `lib/erros.ts`, `lib/loadEnv.ts` e `backend/tsconfig.json` (`strict`, CommonJS, saída em `dist/`). `database/` e `scripts/` seguem em JS. Jest usa `ts-jest`.
 - Scripts do back: `dev` (nodemon + tsx), `build` (`tsc`), `typecheck` (`tsc --noEmit`), `start` (`node dist/server.js`), `start:prod` (`node database/migrate.js && node dist/server.js`).

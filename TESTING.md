@@ -1,14 +1,14 @@
 # Testes automatizados
 
-Padrão adotado: **Jest** no backend (Node/Express) e **Jest + Testing Library** no frontend (Create React App).
+Três camadas: **Jest + Supertest** no backend (Postgres real), **Jest + Testing Library** no frontend (Create React App) e **Playwright** (E2E). O CI roda todas e também constrói as imagens Docker.
 
 ## Backend (`backend/`)
 
-- **Unitários:** funções puras em `lib/` (ex.: `test/estoqueQuantidade.test.js`).
-- **Integração:** **Supertest** contra o `app` Express exportado por `server.js`, com **Postgres real** em banco de teste (`*_test`). Veja `backend/test/README.md` para subir o banco e entender a estrutura. Só `test/health.test.js` ainda mocka o `pg`.
-- O servidor só chama `listen()` quando o arquivo é executado diretamente (`node server.js` / `npm start`), permitindo `require('../server')` nos testes sem abrir porta.
+- **Unitários:** funções puras em `lib/` (ex.: `test/boletosSemana.test.js`, `test/erros.test.js`).
+- **Integração:** **Supertest** contra o `app` Express exportado por `server.ts`, com **Postgres real** em banco `*_test`. Detalhes em `backend/test/README.md`. Só `test/health.test.js` ainda mocka o `pg`.
+- O servidor só chama `listen()` quando o arquivo é executado diretamente (`node dist/server.js`), permitindo `require('../server')` nos testes sem abrir porta.
 - Com `NODE_ENV=test`, o backend não faz ping inicial ao PostgreSQL nem imprime logs de configuração do banco.
-- O `npm test` cuida do Postgres de teste (Docker). Detalhes em `backend/test/README.md`.
+- O `npm test` sobe o Postgres de teste (Docker) sozinho.
 
 ```bash
 cd backend
@@ -16,6 +16,8 @@ npm install
 npm test              # uma execução; sobe o Postgres de teste no Docker se precisar
 npm run test:watch    # durante o desenvolvimento
 npm run test:coverage # cobertura (pastas configuradas no jest.config.js)
+npm run typecheck     # tsc --noEmit
+npm run build         # tsc -> dist/
 ```
 
 ## Frontend (`frontend/`)
@@ -25,13 +27,23 @@ npm run test:coverage # cobertura (pastas configuradas no jest.config.js)
 
 ```bash
 cd frontend
-npm test
+npm test              # CI=true npm test para execução não interativa
+npx tsc --noEmit
 ```
 
-Em CI, use `CI=true npm test` no frontend para execução não interativa.
+## E2E (`e2e/`)
+Playwright com Chromium contra API e front reais e Postgres real. Veja `e2e/README.md`.
+
+```bash
+cd e2e && npm test
+```
+
+## Imagens Docker
+O job `docker` do CI roda `docker build ./backend` e `docker build ./frontend`. Para validar a stack inteira localmente (migrations, health, front): `docker compose up --build` (ver `docs/DEPLOY-DOCKER.md`).
 
 ## Referências
 
 - [Jest](https://jestjs.io/)
 - [Supertest](https://github.com/ladjs/supertest)
 - [Testing Library](https://testing-library.com/docs/react-testing-library/intro/)
+- [Playwright](https://playwright.dev/)

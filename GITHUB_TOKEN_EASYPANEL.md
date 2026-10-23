@@ -1,3 +1,5 @@
+> **Desatualizado:** este guia histórico cita `node server.js`/Nixpacks, que não existem mais. O deploy atual usa Docker: veja [docs/DEPLOY-DOCKER.md](docs/DEPLOY-DOCKER.md).
+
 # 🔑 Configurar GitHub Token no Easypanel
 
 Guia passo a passo para gerar o token do GitHub e configurar no Easypanel.

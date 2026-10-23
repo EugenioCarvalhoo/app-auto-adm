@@ -1,81 +1,54 @@
-# Guia de Configuração Rápida
+# Guia de configuração rápida (desenvolvimento)
 
-## Passo a Passo
+Para rodar com Docker, veja [docs/DEPLOY-DOCKER.md](./docs/DEPLOY-DOCKER.md).
 
-### 1. Instalar Dependências
-
+## 1. Instalar dependências
 ```bash
-# Instalar dependências do projeto raiz
-npm install
-
-# Instalar dependências do frontend
-cd frontend
-npm install
-cd ..
+npm run install-all        # raiz + frontend + e2e
+cd backend && npm install  # backend (package.json próprio, com as devDependencies: nodemon, tsx, typescript)
 ```
+O `install-all` **não** instala o backend. Sem o `npm install` em `backend/`, `nodemon` e `tsx` não são reconhecidos.
 
-### 2. Configurar PostgreSQL
-
-1. Certifique-se de que o PostgreSQL está instalado e rodando
-2. Crie o banco de dados:
+## 2. PostgreSQL
+Crie o banco:
 ```sql
 CREATE DATABASE controle_financeiro;
 ```
-
-3. Copie o arquivo de exemplo e configure:
+Copie o modelo e edite:
 ```bash
 # Windows PowerShell
-Copy-Item backend\env.example backend\.env
-
+Copy-Item backend\.env.example backend\.env
 # Linux/Mac
-cp backend/env.example backend/.env
+cp backend/.env.example backend/.env
 ```
-
-4. Edite `backend/.env` com suas credenciais:
 ```
-DB_USER=seu_usuario
 DB_HOST=localhost
-DB_NAME=controle_financeiro
-DB_PASSWORD=sua_senha
 DB_PORT=5432
+DB_NAME=controle_financeiro
+DB_USER=seu_usuario
+DB_PASSWORD=sua_senha
+JWT_SECRET=uma_chave_longa_e_aleatoria
 PORT=5000
 ```
 
-### 3. Executar Migrations
-
+## 3. Migrations e admin
 ```bash
 npm run migrate
+npm run create-admin       # admin / admin123 — troque a senha depois
 ```
 
-### 4. Iniciar o Sistema
-
+## 4. Iniciar
 ```bash
-# Iniciar backend e frontend juntos
-npm run dev
-
-# Ou separadamente:
-# Terminal 1 - Backend
-npm run server
-
-# Terminal 2 - Frontend
-npm run client
+npm run dev                # API (nodemon + tsx) e front juntos
 ```
+Ou em dois terminais: `cd backend && npm run dev` e `cd frontend && npm start`.
+Acesse `http://localhost:3000`. A API fica em `:5000`.
 
-### 5. Acessar a Aplicação
+No frontend, `npm start` usa `cross-env`; se não for reconhecido, rode `npm install` em `frontend/`. Em Linux/WSL também existe `npm run start:unix`.
 
-Abra o navegador em: `http://localhost:3000`
-
-## Solução de Problemas
-
-### Erro de conexão com o banco
-- Verifique se o PostgreSQL está rodando
-- Confirme as credenciais em `backend/.env`
-- Teste a conexão: `psql -U seu_usuario -d controle_financeiro`
-
-### Erro ao executar migrations
-- Certifique-se de que o banco de dados existe
-- Verifique as permissões do usuário do PostgreSQL
-
-### Porta já em uso
-- Altere a porta no arquivo `.env` (backend) ou `package.json` (frontend)
-
+## Solução de problemas
+- **`nodemon`/`tsx` não reconhecido:** falta `npm install` em `backend/`.
+- **`cross-env` não reconhecido:** falta `npm install` em `frontend/`.
+- **Erro de conexão com o banco:** confira se o PostgreSQL está no ar e as credenciais em `backend/.env`.
+- **Migrations falham:** o banco precisa existir e o usuário precisa de permissão para criar tabelas.
+- **Porta em uso:** mude `PORT` em `backend/.env` (e a URL da API no front, em `frontend/src/config.js` ou `REACT_APP_API_URL`).

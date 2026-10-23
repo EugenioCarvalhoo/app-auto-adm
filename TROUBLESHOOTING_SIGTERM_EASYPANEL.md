@@ -1,3 +1,5 @@
+> **Desatualizado:** este guia histórico cita `node server.js`/Nixpacks, que não existem mais. O deploy atual usa Docker: veja [docs/DEPLOY-DOCKER.md](docs/DEPLOY-DOCKER.md).
+
 # 🔧 Troubleshooting: Erro SIGTERM no Easypanel
 
 Guia para resolver o problema de encerramento do servidor após iniciar.
