@@ -4,6 +4,7 @@ import './App.css';
 import Login from './components/Login';
 import CadastroRestaurantes from './components/CadastroRestaurantes';
 import AdminDashboard from './components/AdminDashboard';
+import AdminOcorrenciasBoletos from './components/AdminOcorrenciasBoletos';
 import AdminPermissoesUsuarios from './components/AdminPermissoesUsuarios';
 import BoletosModulo from './components/boletos/BoletosModulo';
 import { permissoesUsuario, telaInicialUsuario, usuarioTemAlgumModulo } from './lib/userPermissoes';
@@ -271,6 +272,18 @@ function App() {
                 Usuários
               </button>
             )}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTelaAtual('ocorrencias');
+                  setError(null);
+                }}
+                className={telaAtual === 'ocorrencias' ? 'nav-tab active' : 'nav-tab'}
+              >
+                Ocorrências
+              </button>
+            )}
           </div>
           {restaurantes.length > 0 && (
             <select
@@ -361,11 +374,15 @@ function App() {
               restauranteId={restauranteSelecionado}
               restauranteNome={restauranteAtual?.nome}
               simples={!isAdmin}
+              podeMarcarPago={perms.pagar}
+              podeDesfazerPago={perms.admin}
               onMessage={setError}
             />
           )
         ) : telaAtual === 'permissoes' && isAdmin ? (
           <AdminPermissoesUsuarios onError={(msg: string | null) => setError(msg)} />
+        ) : telaAtual === 'ocorrencias' && isAdmin ? (
+          <AdminOcorrenciasBoletos />
         ) : telaAtual === 'restaurantes' && isAdmin ? (
           <CadastroRestaurantes onUpdate={handleRestaurantesUpdated} />
         ) : (

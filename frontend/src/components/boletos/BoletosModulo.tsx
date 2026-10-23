@@ -11,14 +11,34 @@ import {
   vencimentoEfetivo
 } from '../../lib/boletosSemana';
 import { mensagemErro } from '../../lib/erros';
-import type { Boleto, Meta, SemanaResumo, TipoDado } from '../../types';
+import { comprimirImagem } from '../../lib/imagem';
+import { formatarLinhaDigitavel, somenteDigitos } from '../../lib/linhaDigitavel';
+import type {
+  Boleto,
+  CampoLido,
+  ConflitoBoleto,
+  ErroLimiteLeitura,
+  ExtracaoResposta,
+  Meta,
+  SemanaResumo,
+  TipoDado
+} from '../../types';
+import AnexoImagem from './AnexoImagem';
+import CopiarLinha from './CopiarLinha';
 import './BoletosModulo.css';
+
+/** Campo de formulário que a IA pode deixar de ler (os da API, mais o tipo). */
+type CampoDestaque = CampoLido | 'tipo';
 
 type Aba = 'resumo' | 'cadastro' | 'metas';
 interface Props {
   restauranteId: number;
   restauranteNome?: string;
   simples?: boolean;
+  /** Mostra "Marcar como pago" (permissão vem de lib/userPermissoes; o back valida). */
+  podeMarcarPago?: boolean;
+  /** Mostra "Desfazer pagamento" (só admin; o back valida). */
+  podeDesfazerPago?: boolean;
   onMessage?: (msg: string | null) => void;
 }
 
@@ -27,8 +47,55 @@ const VAZIO = {
   dt_vencimento: '',
   descricao: '',
   valor: '',
-  tipo: 'Boleto' as TipoDado
+  tipo: 'Boleto' as TipoDado,
+  fornecedor: '',
+  linha_digitavel: ''
 };
+
+interface ImagemPendente {
+  blob: Blob;
+  hash: string;
+}
+
+interface AnexoFalha extends ImagemPendente {
+  boletoId: number;
+  mensagem: string;
+  /** 409 (já tem imagem): reenviar não adianta. */
+  semRetentativa: boolean;
+}
+
+const MEDIA_CELULAR ='(max-width: 720px)';
+
+/** true em tela de celular (cartões em vez de tabela). Sem matchMedia (testes) => desktop. */
+function useTelaCelular(): boolean {
+  const consulta = () =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia(MEDIA_CELULAR).matches
+      : false;
+  const [celular, setCelular] = useState<boolean>(consulta);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined;
+    const mq = window.matchMedia(MEDIA_CELULAR);
+    const aoMudar = () => setCelular(mq.matches);
+    aoMudar();
+    mq.addEventListener('change', aoMudar);
+    return () => mq.removeEventListener('change', aoMudar);
+  }, []);
+  return celular;
+}
+
+function conflitoDe(error: unknown): ConflitoBoleto | null {
+  if (axios.isAxiosError<ConflitoBoleto>(error) && error.response?.status === 409) {
+    return error.response.data || null;
+  }
+  return null;
+}
+
+function formatarPagoEm(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+}
 
 function lancamentoDentroDeUmDia(createdAt: string | null | undefined): boolean {
   if (!createdAt) return false;
@@ -54,7 +121,14 @@ function textoPercentual(valor: number, casas = 1): string {
   return `${valor.toFixed(casas).replace('.', ',')}%`;
 }
 
-const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simples = false, onMessage }) => {
+const BoletosModulo: React.FC<Props> = ({
+  restauranteId,
+  restauranteNome,
+  simples = false,
+  podeMarcarPago = false,
+  podeDesfazerPago = false,
+  onMessage
+}) => {
   const [aba, setAba] = useState<Aba>('cadastro');
   const [boletos, setBoletos] = useState<Boleto[]>([]);
   const [semanas, setSemanas] = useState<SemanaResumo[]>([]);
@@ -73,6 +147,32 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
   const [filtroTabela, setFiltroTabela] = useState('ALL');
   const [editandoMetaChave, setEditandoMetaChave] = useState<string | null>(null);
   const [metaCardValor, setMetaCardValor] = useState('');
+  const celular = useTelaCelular();
+  // Leitura por imagem
+  const [lendo, setLendo] = useState(false);
+  const [erroIa, setErroIa] = useState<string | null>(null);
+  const [avisosIa, setAvisosIa] = useState<string[]>([]);
+  const [naoLidos, setNaoLidos] = useState<CampoDestaque[]>([]);
+  const [previaUrl, setPreviaUrl] = useState<string | null>(null);
+  const [lidoPorIa, setLidoPorIa] = useState(false);
+  const [repetida, setRepetida] = useState<Boleto | true | null>(null);
+  /** Teto diário atingido: a leitura por IA fica desabilitada até recarregar (nada é persistido). */
+  const [limiteDiario, setLimiteDiario] = useState(false);
+  const arquivoPendente = useRef<Blob | null>(null);
+  /** Imagem comprimida (os mesmos bytes enviados à extração) + hash, até o cadastro ser confirmado. */
+  const imagemLida = useRef<ImagemPendente | null>(null);
+  /** Boleto já criado cuja imagem não subiu: mantém o Blob em memória para reenviar. */
+  const [anexoFalha, setAnexoFalha] = useState<AnexoFalha | null>(null);
+  const [enviandoAnexo, setEnviandoAnexo] = useState(false);
+  // Parecidos / pagamento
+  const [similares, setSimilares] = useState<Boleto[] | null>(null);
+  const [pagandoId, setPagandoId] = useState<number | null>(null);
+  const [desfazendo, setDesfazendo] = useState<Boleto | null>(null);
+  const [motivo, setMotivo] = useState('');
+  const [erroMotivo, setErroMotivo] = useState<string | null>(null);
+  const [anexoEdicao, setAnexoEdicao] = useState<number | null>(null);
+  const inputCamera = useRef<HTMLInputElement>(null);
+  const inputGaleria = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const cardRef = useRef<HTMLElement>(null);
   const ultimoCampo = useRef<HTMLElement | null>(null);
@@ -222,8 +322,70 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
     setForm((atual) => ({ ...atual, tipo }));
   };
 
-  const salvarLancamento = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const limparLeitura = () => {
+    setErroIa(null);
+    setAvisosIa([]);
+    setNaoLidos([]);
+    setLidoPorIa(false);
+    setRepetida(null);
+    setPreviaUrl((atual) => {
+      if (atual) URL.revokeObjectURL(atual);
+      return null;
+    });
+    arquivoPendente.current = null;
+    imagemLida.current = null;
+  };
+
+  /** Grava a imagem após o 201 do cadastro. Em falha o boleto já existe: guarda o Blob para reenviar. */
+  const enviarAnexo = async (boletoId: number, imagem: ImagemPendente): Promise<boolean> => {
+    setEnviandoAnexo(true);
+    try {
+      const corpo = new FormData();
+      corpo.append('imagem', imagem.blob, 'boleto.jpg');
+      corpo.append('hash_sha256', imagem.hash);
+      await axios.post(`${API_URL}/boletos/${boletoId}/anexo`, corpo);
+      setAnexoFalha(null);
+      return true;
+    } catch (error) {
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+      setAnexoFalha({
+        ...imagem,
+        boletoId,
+        semRetentativa: status === 409,
+        mensagem: mensagemErro(error, 'Não foi possível enviar a imagem.')
+      });
+      return false;
+    } finally {
+      setEnviandoAnexo(false);
+    }
+  };
+
+  const reenviarAnexo = async () => {
+    if (!anexoFalha) return;
+    const { boletoId, blob, hash } = anexoFalha;
+    if (await enviarAnexo(boletoId, { blob, hash })) await carregar();
+  };
+
+  useEffect(
+    () => () => {
+      if (previaUrl) URL.revokeObjectURL(previaUrl);
+    },
+    [previaUrl]
+  );
+
+  const limparFormulario = () => {
+    setForm(VAZIO);
+    setEditandoId(null);
+    setAnexoEdicao(null);
+    limparLeitura();
+  };
+
+  const editarCampo = (campo: CampoDestaque, patch: Partial<typeof VAZIO>) => {
+    setForm((atual) => ({ ...atual, ...patch }));
+    setNaoLidos((atual) => (atual.includes(campo) ? atual.filter((c) => c !== campo) : atual));
+  };
+
+  const enviarLancamento = async (confirmarSimilar: boolean) => {
     const valor = parseValorBr(form.valor);
     const recebimento = form.tipo === 'Sem Boleto' ? form.dt_recebimento || hojeIso() : form.dt_recebimento;
     if (!form.descricao.trim()) {
@@ -250,37 +412,174 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
       dt_vencimento: form.tipo === 'Boleto' ? form.dt_vencimento : null,
       descricao: form.descricao.trim(),
       valor,
-      tipo: form.tipo
+      tipo: form.tipo,
+      fornecedor: form.fornecedor.trim() || null,
+      linha_digitavel: form.linha_digitavel || null,
+      ...(confirmarSimilar ? { confirmar_similar: true } : {})
     };
+    const imagem = editandoId ? null : imagemLida.current;
     try {
+      let novoId: number | null = null;
       if (editandoId) {
         await axios.put(`${API_URL}/boletos/${editandoId}`, payload);
       } else {
-        await axios.post(`${API_URL}/boletos`, payload);
+        const { data: criado } = await axios.post<Boleto>(`${API_URL}/boletos`, payload);
+        novoId = typeof criado?.id === 'number' ? criado.id : null;
       }
-      setForm(VAZIO);
-      setEditandoId(null);
+      setSimilares(null);
+      limparFormulario();
+      // A imagem só é gravada depois que o cadastro foi confirmado (201).
+      if (imagem && novoId != null) await enviarAnexo(novoId, imagem);
       await carregar();
     } catch (error) {
-      onMessage?.(mensagemErro(error, 'Não foi possível salvar o lançamento.'));
+      const conflito = conflitoDe(error);
+      if (conflito?.codigo === 'BOLETO_SIMILAR') {
+        setSimilares(conflito.boletos || []);
+      } else {
+        setSimilares(null);
+        onMessage?.(mensagemErro(error, 'Não foi possível salvar o lançamento.'));
+      }
     } finally {
       setSalvando(false);
     }
   };
 
+  const salvarLancamento = (event: React.FormEvent) => {
+    event.preventDefault();
+    void enviarLancamento(false);
+  };
+
   const editar = (item: Boleto) => {
     setAba('cadastro');
+    limparLeitura();
     setEditandoId(item.id);
+    setAnexoEdicao(item.tem_anexo ? item.id : null);
     setForm({
       dt_recebimento: item.dt_recebimento || '',
       dt_vencimento: item.tipo === 'Boleto' ? item.dt_vencimento || '' : '',
       descricao: item.descricao,
       valor: String(item.valor).replace('.', ','),
-      tipo: item.tipo
+      tipo: item.tipo,
+      fornecedor: item.fornecedor || '',
+      linha_digitavel: item.linha_digitavel || ''
     });
     window.setTimeout(() => {
       cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, 0);
+  };
+
+  // ----- Leitura por imagem (só celular) -----
+
+  const lerImagem = async (arquivo: Blob, forcar: boolean) => {
+    setLendo(true);
+    setErroIa(null);
+    setRepetida(null);
+    arquivoPendente.current = arquivo;
+    onMessage?.(null);
+    try {
+      const corpo = new FormData();
+      corpo.append('imagem', arquivo, 'boleto.jpg');
+      corpo.append('restaurante_id', String(restauranteId));
+      if (forcar) corpo.append('forcar_repetida', 'true');
+      const { data } = await axios.post<ExtracaoResposta>(`${API_URL}/boletos/extrair`, corpo);
+      if (data.aviso_imagem_repetida) {
+        arquivoPendente.current = arquivo;
+        setRepetida(data.aviso_imagem_repetida);
+        return;
+      }
+      arquivoPendente.current = null;
+      imagemLida.current = { blob: arquivo, hash: data.hash_sha256 };
+      const tipo: TipoDado = data.tipo_sugerido ?? 'Boleto';
+      setEditandoId(null);
+      setAnexoEdicao(null);
+      setForm({
+        tipo,
+        fornecedor: data.fornecedor ?? '',
+        descricao: data.fornecedor ?? '',
+        valor: data.valor == null ? '' : String(data.valor).replace('.', ','),
+        dt_vencimento: tipo === 'Boleto' ? data.dt_vencimento ?? '' : '',
+        dt_recebimento: data.dt_recebimento ?? '',
+        linha_digitavel: data.linha_digitavel ? somenteDigitos(data.linha_digitavel) : ''
+      });
+      const destaque: CampoDestaque[] = [...data.campos_nao_lidos];
+      if (data.tipo_sugerido == null) destaque.push('tipo');
+      setNaoLidos(destaque);
+      setAvisosIa(data.avisos || []);
+      setLidoPorIa(true);
+      setPreviaUrl((atual) => {
+        if (atual) URL.revokeObjectURL(atual);
+        return URL.createObjectURL(arquivo);
+      });
+      window.setTimeout(() => cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+    } catch (error) {
+      let msg = mensagemErro(error, 'Não foi possível ler a imagem. Tente de novo ou preencha manualmente.');
+      if (axios.isAxiosError<ErroLimiteLeitura>(error) && error.response?.status === 429) {
+        if (error.response.data?.codigo === 'LIMITE_DIARIO') {
+          // Sem "tentar de novo": só amanhã. O cadastro manual segue disponível.
+          arquivoPendente.current = null;
+          setLimiteDiario(true);
+          setErroIa(`${msg}. Preencha o cadastro manualmente.`);
+          return;
+        }
+        const espera = Number(error.response.headers?.['retry-after']);
+        if (Number.isFinite(espera) && espera > 0) msg = `${msg} Tente novamente em ${espera} s.`;
+      }
+      setErroIa(msg);
+    } finally {
+      setLendo(false);
+    }
+  };
+
+  const aoEscolherImagem = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const arquivo = event.target.files?.[0];
+    event.target.value = '';
+    if (!arquivo) return;
+    limparLeitura();
+    setLendo(true);
+    try {
+      const comprimida = await comprimirImagem(arquivo);
+      await lerImagem(comprimida, false);
+    } catch (error) {
+      setErroIa(error instanceof Error ? error.message : 'Não foi possível preparar a imagem.');
+      setLendo(false);
+    }
+  };
+
+  // ----- Pagamento -----
+
+  const marcarPago = async (item: Boleto) => {
+    setPagandoId(item.id);
+    onMessage?.(null);
+    try {
+      await axios.post(`${API_URL}/boletos/${item.id}/pago`);
+      await carregar();
+    } catch (error) {
+      onMessage?.(mensagemErro(error, 'Não foi possível marcar como pago.'));
+    } finally {
+      setPagandoId(null);
+    }
+  };
+
+  const confirmarDesfazer = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!desfazendo) return;
+    const texto = motivo.trim();
+    if (texto.length < 5 || texto.length > 500) {
+      setErroMotivo('Informe o motivo com 5 a 500 caracteres.');
+      return;
+    }
+    setPagandoId(desfazendo.id);
+    setErroMotivo(null);
+    try {
+      await axios.delete(`${API_URL}/boletos/${desfazendo.id}/pago`, { data: { motivo: texto } });
+      setDesfazendo(null);
+      setMotivo('');
+      await carregar();
+    } catch (error) {
+      setErroMotivo(mensagemErro(error, 'Não foi possível desfazer o pagamento.'));
+    } finally {
+      setPagandoId(null);
+    }
   };
 
   const excluir = async (id: number) => {
@@ -288,10 +587,7 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
     onMessage?.(null);
     try {
       await axios.delete(`${API_URL}/boletos/${id}`);
-      if (editandoId === id) {
-        setEditandoId(null);
-        setForm(VAZIO);
-      }
+      if (editandoId === id) limparFormulario();
       await carregar();
     } catch (error) {
       onMessage?.(mensagemErro(error, 'Não foi possível remover o lançamento.'));
@@ -364,6 +660,113 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
   const somaValores = (itens: Boleto[]) =>
     Math.round(itens.reduce((acc, item) => acc + Number(item.valor || 0), 0) * 100) / 100;
 
+  const destacado = (campo: CampoDestaque) => naoLidos.includes(campo);
+  const classeCampo = (campo: CampoDestaque) => (destacado(campo) ? 'boletos-campo--nao-lido' : undefined);
+  const avisoNaoLido = (campo: CampoDestaque) =>
+    destacado(campo) ? <span className="boletos-nao-lido">⚠ Não lido: confira ou preencha</span> : null;
+
+  const painelLeitura = !editandoId && (
+    <div className="boletos-ia">
+      <div className="boletos-ia-touch">
+        <button
+          type="button"
+          className="boletos-ia-btn"
+          disabled={lendo || salvando || limiteDiario}
+          onClick={() => inputCamera.current?.click()}
+          data-boleto-ia="camera"
+        >
+          <span aria-hidden="true">📷 </span>Ler com IA (fotografar)
+        </button>
+        <button
+          type="button"
+          className="boletos-btn-ghost boletos-btn-grande"
+          disabled={lendo || salvando || limiteDiario}
+          onClick={() => inputGaleria.current?.click()}
+          data-boleto-ia="galeria"
+        >
+          Escolher da galeria
+        </button>
+        <input
+          ref={inputCamera}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="boletos-sr-only"
+          tabIndex={-1}
+          aria-label="Fotografar boleto"
+          onChange={(e) => void aoEscolherImagem(e)}
+        />
+        <input
+          ref={inputGaleria}
+          type="file"
+          accept="image/*"
+          className="boletos-sr-only"
+          tabIndex={-1}
+          aria-label="Escolher imagem do boleto"
+          onChange={(e) => void aoEscolherImagem(e)}
+        />
+      </div>
+      <p className="boletos-ia-desktop">A leitura do boleto por foto está disponível no celular.</p>
+
+      {lendo && (
+        <p className="boletos-ia-status" role="status">
+          Lendo a imagem… isso pode levar alguns segundos.
+        </p>
+      )}
+      {erroIa && (
+        <div className="boletos-ia-erro" role="alert">
+          <p>{erroIa}</p>
+          {arquivoPendente.current && !limiteDiario && (
+            <button
+              type="button"
+              className="boletos-btn-ghost boletos-btn-grande"
+              disabled={lendo}
+              onClick={() => arquivoPendente.current && void lerImagem(arquivoPendente.current, false)}
+            >
+              Tentar de novo
+            </button>
+          )}
+        </div>
+      )}
+      {repetida && (
+        <div className="boletos-ia-erro" role="alert">
+          <p>
+            Esta imagem já foi cadastrada neste restaurante
+            {repetida !== true && repetida.fornecedor ? ` (${repetida.fornecedor}` : ''}
+            {repetida !== true && repetida.fornecedor ? `, ${formatarMoeda(Number(repetida.valor))})` : ''}.
+          </p>
+          <div className="boletos-ia-erro-acoes">
+            <button
+              type="button"
+              className="boletos-btn-ghost boletos-btn-grande"
+              onClick={() => arquivoPendente.current && void lerImagem(arquivoPendente.current, true)}
+            >
+              Ler mesmo assim
+            </button>
+            <button type="button" className="boletos-btn-ghost boletos-btn-grande" onClick={limparLeitura}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+      {lidoPorIa && (
+        <div className="boletos-ia-resultado">
+          <p className="boletos-ia-aviso" role="status">
+            Dados lidos por IA. Confira cada campo antes de salvar: nada é salvo automaticamente.
+          </p>
+          {avisosIa.length > 0 && (
+            <ul className="boletos-ia-avisos">
+              {avisosIa.map((aviso) => (
+                <li key={aviso}>⚠ {aviso}</li>
+              ))}
+            </ul>
+          )}
+          {previaUrl && <img src={previaUrl} alt="Pré-visualização da imagem enviada" className="boletos-previa" />}
+        </div>
+      )}
+    </div>
+  );
+
   const formulario = (
     <aside
       ref={cardRef}
@@ -387,45 +790,101 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
           </svg>
         </button>
       </div>
+      {painelLeitura}
+      {anexoFalha && (
+        <div className="boletos-ia-erro" role="alert" data-boleto-anexo-falha={anexoFalha.boletoId}>
+          <p>
+            O lançamento foi salvo, mas a imagem não foi anexada: {anexoFalha.mensagem}
+            {anexoFalha.semRetentativa ? '' : ' Você pode tentar enviar a imagem de novo.'}
+          </p>
+          <div className="boletos-ia-erro-acoes">
+            {!anexoFalha.semRetentativa && (
+              <button
+                type="button"
+                className="boletos-btn-ghost boletos-btn-grande"
+                disabled={enviandoAnexo}
+                onClick={() => void reenviarAnexo()}
+              >
+                {enviandoAnexo ? 'Enviando…' : 'Enviar imagem novamente'}
+              </button>
+            )}
+            <button
+              type="button"
+              className="boletos-btn-ghost boletos-btn-grande"
+              disabled={enviandoAnexo}
+              onClick={() => setAnexoFalha(null)}
+            >
+              {anexoFalha.semRetentativa ? 'Fechar' : 'Descartar imagem'}
+            </button>
+          </div>
+        </div>
+      )}
+      {anexoEdicao != null && (
+        <div className="boletos-anexo-linha">
+          <AnexoImagem boletoId={anexoEdicao} />
+        </div>
+      )}
       <form
         ref={formRef}
         className="boletos-form boletos-form--lancamento"
         onSubmit={salvarLancamento}
         onFocus={guardarCampo}
       >
-        <label>
+        <label className={classeCampo('tipo')}>
           Tipo de dado <span className="boletos-req">*</span>
-          <select data-boleto-campo="tipo" value={form.tipo} onChange={(e) => mudarTipo(e.target.value as TipoDado)}>
+          <select
+            data-boleto-campo="tipo"
+            value={form.tipo}
+            onChange={(e) => {
+              mudarTipo(e.target.value as TipoDado);
+              setNaoLidos((atual) => atual.filter((c) => c !== 'tipo'));
+            }}
+          >
             <option value="Boleto">Boleto</option>
             <option value="Sem Boleto">Sem Boleto</option>
           </select>
+          {destacado('tipo') && <span className="boletos-nao-lido">⚠ Imagem não identificada como boleto: escolha o tipo</span>}
         </label>
-        <label>
+        <label className={classeCampo('dt_recebimento')}>
           Dt. recebimento <span className="boletos-req">*</span>
           <input
             data-boleto-campo="recebimento"
             type="date"
             value={form.dt_recebimento}
-            onChange={(e) => setForm({ ...form, dt_recebimento: e.target.value })}
+            onChange={(e) => editarCampo('dt_recebimento', { dt_recebimento: e.target.value })}
             required
           />
+          {avisoNaoLido('dt_recebimento')}
         </label>
         {form.tipo === 'Boleto' ? (
-          <label>
+          <label className={classeCampo('dt_vencimento')}>
             Dt. vencimento <span className="boletos-req">*</span>
             <input
               data-boleto-campo="vencimento"
               type="date"
               value={form.dt_vencimento}
-              onChange={(e) => setForm({ ...form, dt_vencimento: e.target.value })}
+              onChange={(e) => editarCampo('dt_vencimento', { dt_vencimento: e.target.value })}
               required
             />
+            {avisoNaoLido('dt_vencimento')}
           </label>
         ) : (
           <p className="boletos-avista">
             À vista: a data entra com hoje e pode ser alterada. O vencimento usado é essa data mais 7 dias.
           </p>
         )}
+        <label className={classeCampo('fornecedor')}>
+          Fornecedor
+          <input
+            data-boleto-campo="fornecedor"
+            type="text"
+            autoComplete="organization"
+            value={form.fornecedor}
+            placeholder="Ex: Hortifruti Sol"
+            onChange={(e) => editarCampo('fornecedor', { fornecedor: e.target.value })}
+          />
+          {avisoNaoLido('fornecedor')}
+        </label>
         <label>
           Descrição <span className="boletos-req">*</span>
           <input
@@ -437,33 +896,54 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
             required
           />
         </label>
-        <label>
+        <label className={classeCampo('valor')}>
           Valor (R$) <span className="boletos-req">*</span>
           <input
             data-boleto-campo="valor"
             type="text"
             inputMode="decimal"
             value={form.valor}
-            onChange={(e) => setForm({ ...form, valor: e.target.value })}
+            onChange={(e) => editarCampo('valor', { valor: e.target.value })}
             placeholder="0,00"
             required
           />
+          {avisoNaoLido('valor')}
         </label>
-        <button type="submit" className="boletos-btn-adicionar" data-boleto-salvar disabled={salvando}>
-          {editandoId ? 'Atualizar' : 'Adicionar'}
-        </button>
-        {editandoId && (
-          <button
-            type="button"
-            className="boletos-btn-ghost boletos-btn-cancelar"
-            onClick={() => {
-              setEditandoId(null);
-              setForm(VAZIO);
-            }}
-          >
-            Cancelar
-          </button>
+        {form.tipo === 'Boleto' && (
+          <div className={`boletos-linha-bloco ${destacado('linha_digitavel') ? 'boletos-campo--nao-lido' : ''}`}>
+            <label className="boletos-linha-label">
+              Linha digitável
+              <input
+                data-boleto-campo="linha_digitavel"
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                value={formatarLinhaDigitavel(form.linha_digitavel)}
+                placeholder="Somente números"
+                onChange={(e) =>
+                  editarCampo('linha_digitavel', { linha_digitavel: somenteDigitos(e.target.value) })
+                }
+              />
+              {avisoNaoLido('linha_digitavel')}
+            </label>
+            {form.linha_digitavel.length > 0 && <CopiarLinha linha={form.linha_digitavel} grande />}
+          </div>
         )}
+        <div className="boletos-form-rodape">
+          <button type="submit" className="boletos-btn-adicionar" data-boleto-salvar disabled={salvando || lendo || enviandoAnexo}>
+            {salvando ? 'Salvando…' : editandoId ? 'Atualizar' : 'Adicionar'}
+          </button>
+          {(editandoId || lidoPorIa) && (
+            <button
+              type="button"
+              className="boletos-btn-ghost boletos-btn-cancelar"
+              disabled={salvando}
+              onClick={limparFormulario}
+            >
+              Cancelar
+            </button>
+          )}
+        </div>
       </form>
       <p className="boletos-preview">
         Vencimento usado: {previsao.efetivo ? formatarDataBr(previsao.efetivo) : '—'}
@@ -477,9 +957,110 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
     </aside>
   );
 
+  const seloPago = (item: Boleto) =>
+    item.pago ? (
+      <span className="boletos-selo boletos-selo--pago">
+        <span aria-hidden="true">✓ </span>Pago{item.pago_em ? ` em ${formatarPagoEm(item.pago_em)}` : ''}
+      </span>
+    ) : (
+      <span className="boletos-selo boletos-selo--aberto">Em aberto</span>
+    );
+
+  // Boleto pago só o admin altera (podeDesfazerPago vem de perms.admin); o back valida.
+  const bloqueadoPago = (item: Boleto) => item.pago && !podeDesfazerPago;
+
+  const acoesItem = (item: Boleto) => (
+    <>
+      <button
+        type="button"
+        className="boletos-btn-edit"
+        disabled={bloqueadoPago(item)}
+        onClick={() => editar(item)}
+      >
+        Editar
+      </button>
+      {(!simples || lancamentoDentroDeUmDia(item.created_at)) && (
+        <button
+          type="button"
+          className="boletos-btn-del"
+          disabled={bloqueadoPago(item)}
+          onClick={() => excluir(item.id)}
+        >
+          Excluir
+        </button>
+      )}
+      {bloqueadoPago(item) && (
+        <span className="boletos-hint boletos-pago-aviso">Pago: só o administrador altera</span>
+      )}
+      {podeMarcarPago && !item.pago && (
+        <button
+          type="button"
+          className="boletos-btn-pagar"
+          disabled={pagandoId === item.id}
+          onClick={() => void marcarPago(item)}
+        >
+          {pagandoId === item.id ? 'Salvando…' : 'Marcar como pago'}
+        </button>
+      )}
+      {podeDesfazerPago && item.pago && (
+        <button
+          type="button"
+          className="boletos-btn-ghost"
+          disabled={pagandoId === item.id}
+          onClick={() => {
+            setMotivo('');
+            setErroMotivo(null);
+            setDesfazendo(item);
+          }}
+        >
+          Desfazer pagamento
+        </button>
+      )}
+      {item.tem_anexo && <AnexoImagem boletoId={item.id} />}
+      {item.linha_digitavel && <CopiarLinha linha={item.linha_digitavel} />}
+    </>
+  );
+
+  const fornecedorExtra = (item: Boleto) =>
+    item.fornecedor && item.fornecedor !== item.descricao ? (
+      <small className="boletos-fornecedor">{item.fornecedor}</small>
+    ) : null;
+
   const tabelaRegistros = (itens: Boleto[], vazio: string) =>
     itens.length === 0 ? (
       <p className="boletos-empty">{vazio}</p>
+    ) : celular ? (
+      <ul className="boletos-cartoes">
+        {itens.map((item) => (
+          <li key={item.id} className="boletos-cartao">
+            <div className="boletos-cartao-topo">
+              <span className="boletos-cartao-valor">{formatarMoeda(Number(item.valor))}</span>
+              <span className={item.tipo === 'Sem Boleto' ? 'boletos-pill boletos-pill--vista' : 'boletos-pill'}>
+                {item.tipo}
+              </span>
+            </div>
+            <p className="boletos-cartao-desc">
+              {item.descricao}
+              {fornecedorExtra(item)}
+            </p>
+            <p className="boletos-cartao-meta">
+              Recebimento: {formatarDataBr(item.dt_recebimento) || '—'} · Vencimento:{' '}
+              {formatarDataBr(item.tipo === 'Sem Boleto' ? item.dt_vencimento_efetivo : item.dt_vencimento) || '—'}
+            </p>
+            <p className="boletos-cartao-meta">
+              Semana:{' '}
+              {item.semana_inicio
+                ? `${formatarDataBr(item.semana_inicio)} a ${formatarDataBr(item.semana_fim)}`
+                : '—'}
+            </p>
+            {item.linha_digitavel && (
+              <p className="boletos-cartao-linha">{formatarLinhaDigitavel(item.linha_digitavel)}</p>
+            )}
+            <div className="boletos-cartao-situacao">{seloPago(item)}</div>
+            <div className="boletos-actions boletos-cartao-acoes">{acoesItem(item)}</div>
+          </li>
+        ))}
+      </ul>
     ) : (
       <div className="boletos-table-wrap boletos-table-wrap--plain">
         <table className="boletos-table boletos-table--registros">
@@ -490,6 +1071,7 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
               <th>Descrição</th>
               <th>Valor</th>
               <th>Tipo</th>
+              <th>Situação</th>
               <th>Semana</th>
               <th>Ações</th>
             </tr>
@@ -501,34 +1083,108 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
                 <td>
                   {formatarDataBr(item.tipo === 'Sem Boleto' ? item.dt_vencimento_efetivo : item.dt_vencimento)}
                 </td>
-                <td className="boletos-desc">{item.descricao}</td>
+                <td className="boletos-desc">
+                  {item.descricao}
+                  {fornecedorExtra(item)}
+                </td>
                 <td className="boletos-valor">{formatarMoeda(Number(item.valor))}</td>
                 <td>
                   <span className={item.tipo === 'Sem Boleto' ? 'boletos-pill boletos-pill--vista' : 'boletos-pill'}>
                     {item.tipo === 'Sem Boleto' ? 'Sem Boleto' : 'Boleto'}
                   </span>
                 </td>
+                <td>{seloPago(item)}</td>
                 <td>
                   {item.semana_inicio
                     ? `${formatarDataBr(item.semana_inicio)} a ${formatarDataBr(item.semana_fim)}`
                     : '—'}
                 </td>
-                <td className="boletos-actions">
-                  <button type="button" className="boletos-btn-edit" onClick={() => editar(item)}>
-                    Editar
-                  </button>
-                  {(!simples || lancamentoDentroDeUmDia(item.created_at)) && (
-                    <button type="button" className="boletos-btn-del" onClick={() => excluir(item.id)}>
-                      Excluir
-                    </button>
-                  )}
-                </td>
+                <td className="boletos-actions">{acoesItem(item)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
     );
+
+  const modalSimilares = similares && (
+    <div className="boletos-modal" role="dialog" aria-modal="true" aria-label="Lançamento parecido encontrado">
+      <div className="boletos-modal-card">
+        <h3>Já existe um lançamento parecido</h3>
+        <p>Mesmo fornecedor e mesma data. Confira antes de cadastrar de novo:</p>
+        <ul className="boletos-similares">
+          {similares.map((b) => (
+            <li key={b.id}>
+              <strong>{b.fornecedor || b.descricao}</strong> · {formatarMoeda(Number(b.valor))}
+              <br />
+              <small>
+                Recebimento {formatarDataBr(b.dt_recebimento) || '—'} · Vencimento{' '}
+                {formatarDataBr(b.dt_vencimento_efetivo) || '—'}
+                {b.pago ? ' · Pago' : ''}
+              </small>
+            </li>
+          ))}
+        </ul>
+        <div className="boletos-modal-acoes">
+          <button
+            type="button"
+            className="boletos-btn-ghost boletos-btn-grande"
+            disabled={salvando}
+            onClick={() => setSimilares(null)}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="boletos-btn-adicionar"
+            disabled={salvando}
+            onClick={() => void enviarLancamento(true)}
+          >
+            {salvando ? 'Salvando…' : 'Cadastrar mesmo assim'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const modalDesfazer = desfazendo && (
+    <div className="boletos-modal" role="dialog" aria-modal="true" aria-label="Desfazer pagamento">
+      <form className="boletos-modal-card" onSubmit={(e) => void confirmarDesfazer(e)}>
+        <h3>Desfazer pagamento</h3>
+        <p>
+          {desfazendo.fornecedor || desfazendo.descricao} · {formatarMoeda(Number(desfazendo.valor))}
+        </p>
+        <label className="boletos-motivo">
+          Motivo (obrigatório, 5 a 500 caracteres)
+          <textarea
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            rows={3}
+            maxLength={500}
+            required
+          />
+        </label>
+        {erroMotivo && (
+          <p className="boletos-erro-inline" role="alert">
+            {erroMotivo}
+          </p>
+        )}
+        <div className="boletos-modal-acoes">
+          <button
+            type="button"
+            className="boletos-btn-ghost boletos-btn-grande"
+            disabled={pagandoId === desfazendo.id}
+            onClick={() => setDesfazendo(null)}
+          >
+            Cancelar
+          </button>
+          <button type="submit" className="boletos-btn-adicionar" disabled={pagandoId === desfazendo.id}>
+            {pagandoId === desfazendo.id ? 'Salvando…' : 'Desfazer pagamento'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 
   return (
     <section className="boletos">
@@ -900,6 +1556,8 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
         </>
       )}
 
+      {modalSimilares}
+      {modalDesfazer}
     </section>
   );
 };

@@ -1,7 +1,7 @@
 // @ts-check
 const path = require('path');
 const { defineConfig, devices } = require('@playwright/test');
-const { db, API_PORT, WEB_PORT, API_URL, WEB_URL, JWT_SECRET } = require('./support/env');
+const { db, API_PORT, WEB_PORT, API_URL, WEB_URL, JWT_SECRET, GEMINI_MOCK_PORT, LIMITE_DIARIO_E2E, envStorage } = require('./support/env');
 
 const raiz = path.join(__dirname, '..');
 const reuse = !process.env.CI;
@@ -47,8 +47,23 @@ module.exports = defineConfig({
         DB_PORT: String(db.port),
         DB_NAME: db.database,
         DB_USER: db.user,
-        DB_PASSWORD: db.password
+        DB_PASSWORD: db.password,
+        // Leitura por IA contra o Gemini FALSO local (support/geminiMock.js); a API do Google nunca é chamada.
+        GEMINI_API_KEY: 'chave-e2e',
+        GEMINI_BASE_URL: `http://127.0.0.1:${GEMINI_MOCK_PORT}/v1beta/models`,
+        EXTRAIR_LIMITE_DIARIO: String(LIMITE_DIARIO_E2E),
+        EXTRAIR_RATE_LIMIT_MAX: '100',
+        // Imagens: MinIO de teste (container minio-controle). Sem ele, anexar responde 500 e os testes que o usam pulam.
+        ...envStorage
       }
+    },
+    {
+      name: 'gemini-mock',
+      command: 'node support/geminiMock.js',
+      cwd: __dirname,
+      url: `http://127.0.0.1:${GEMINI_MOCK_PORT}/`,
+      reuseExistingServer: reuse,
+      timeout: 30_000
     },
     {
       name: 'web',

@@ -1,10 +1,13 @@
 import type { NextFunction, Request, Response } from 'express';
 import pool from '../db';
+import { ehTabelaInexistente, MSG_BANCO_DESATUALIZADO } from '../lib/erros';
 
 export interface UserFlags {
   id: number;
   is_admin: boolean;
   modulo_boletos: boolean;
+  /** Pode marcar boleto como pago (admin sempre pode). */
+  pode_marcar_pago: boolean;
 }
 
 /** Linha de usuarios usada para montar a resposta ao cliente. */
@@ -20,11 +23,22 @@ export interface UserClient {
   nome: string;
   is_admin: boolean;
   modulo_boletos: boolean;
+  pode_marcar_pago: boolean;
   restaurante_ids: number[];
 }
 
 export const requireModuloBoletos = async (req: Request, res: Response, next: NextFunction): Promise<void | Response> => {
-  const flags = await loadUserFlags(req.user!.id);
+  let flags: UserFlags | null;
+  try {
+    flags = await loadUserFlags(req.user!.id);
+  } catch (error) {
+    // Nunca deixa a requisição pendurada: 503 (banco desatualizado) ou 500 genérico.
+    if (ehTabelaInexistente(error)) {
+      return res.status(503).json({ error: MSG_BANCO_DESATUALIZADO });
+    }
+    console.error('Erro ao carregar permissões do usuário:', error);
+    return res.status(500).json({ error: 'Erro ao verificar permissões' });
+  }
   if (!flags) {
     return res.status(403).json({ error: 'Usuário inválido.' });
   }
@@ -43,13 +57,25 @@ export const requireAdmin = (req: Request, res: Response, next: NextFunction): v
 
 /** Flags atuais do usuário (DB — não confiar só no JWT). Admin sempre tem boletos. */
 export async function loadUserFlags(userId: number): Promise<UserFlags | null> {
-  const r = await pool.query<{ id: number; is_admin: boolean | null; modulo_boletos: boolean | null }>(
-    'SELECT id, is_admin, COALESCE(modulo_boletos, false) AS modulo_boletos FROM usuarios WHERE id = $1',
+  const r = await pool.query<{
+    id: number;
+    is_admin: boolean | null;
+    modulo_boletos: boolean | null;
+    pode_marcar_pago: boolean | null;
+  }>(
+    `SELECT id, is_admin, COALESCE(modulo_boletos, false) AS modulo_boletos,
+            COALESCE(pode_marcar_pago, false) AS pode_marcar_pago
+     FROM usuarios WHERE id = $1`,
     [userId]
   );
   const row = r.rows[0];
   if (!row) return null;
-  return { ...row, is_admin: !!row.is_admin, modulo_boletos: !!row.is_admin || !!row.modulo_boletos };
+  return {
+    id: row.id,
+    is_admin: !!row.is_admin,
+    modulo_boletos: !!row.is_admin || !!row.modulo_boletos,
+    pode_marcar_pago: !!row.is_admin || !!row.pode_marcar_pago
+  };
 }
 
 export async function shapeUserForClient(userRow: UsuarioRow): Promise<UserClient | null> {
@@ -62,6 +88,7 @@ export async function shapeUserForClient(userRow: UsuarioRow): Promise<UserClien
     nome: userRow.nome,
     is_admin: flags.is_admin,
     modulo_boletos: flags.modulo_boletos,
+    pode_marcar_pago: flags.pode_marcar_pago,
     restaurante_ids: restrito ? await restauranteIdsUsuario(userRow.id) : []
   };
 }
