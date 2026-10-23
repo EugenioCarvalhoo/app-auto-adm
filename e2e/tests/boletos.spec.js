@@ -67,13 +67,7 @@ test.describe('boletos e notas (usuário comum, restaurante A)', () => {
     await linha.getByRole('button', { name: 'Excluir' }).click();
 
     await expect(linha).toHaveCount(0);
-    // exclusão lógica: o registro fica no banco, marcado como excluído por quem apagou, e sai da lista
-    const [b] = await rows("SELECT deleted_at, deleted_by_usuario_id FROM boletos_notas WHERE descricao = 'Para Apagar'");
-    expect(b.deleted_at).not.toBeNull();
-    expect(b.deleted_by_usuario_id).toBe(2);
-    await page.reload();
-    await abrirCadastro(page);
-    await expect(page.locator('tr', { hasText: 'Para Apagar' })).toHaveCount(0);
+    expect(await rows("SELECT 1 FROM boletos_notas WHERE descricao = 'Para Apagar'")).toHaveLength(0);
   });
 
   test('recusar a confirmação mantém o lançamento', async ({ page }) => {

@@ -1,6 +1,6 @@
 # Docker e deploy (Easypanel)
 
-Guia único e atual de containers. Os guias em [`docs/deploy/`](./deploy/README.md) são históricos de troubleshooting e citam comandos antigos (`node server.js`), que não existem mais.
+Guia único e atual de containers. Os `*_EASYPANEL.md` da raiz são históricos de troubleshooting e citam comandos antigos (`node server.js`), que não existem mais.
 
 ## Imagens
 
@@ -31,60 +31,6 @@ node database/migrate.js && exec node dist/server.js
 | `PORT` | não | Padrão `5000`. O domínio do Easypanel deve apontar para essa porta. |
 | `RUN_MIGRATIONS` | não | `0` desliga as migrations no boot. |
 | `LOG_HTTP` | não | `0` desliga o log de cada requisição. |
-| `GEMINI_API_KEY` | não | Chave da API do Gemini para ler boleto/nota por imagem. Sem ela o app sobe e `POST /api/boletos/extrair` responde 503 "Leitura por IA não configurada". Segredo: só nas variáveis do serviço, nunca em arquivo versionado. |
-| `GEMINI_MODEL` | não | Padrão `gemini-2.5-flash-lite`. |
-| `GEMINI_BASE_URL` | não | URL base da API do Gemini (padrão `https://generativelanguage.googleapis.com/v1beta/models`). Só `https`; `http` apenas para `localhost`/`127.0.0.1` (mock). Inválida: a leitura por IA responde 503 e o app continua de pé. |
-| `GEMINI_TIMEOUT_MS` | não | Timeout de cada chamada ao Gemini em ms (inteiro positivo, padrão `20000`). |
-| `STORAGE_ENDPOINT` | para imagens | URL do serviço S3-compatível (MinIO). `https` sempre; `http` só para `localhost`/`127.0.0.1`/`::1` e hostnames internos (sem ponto, ex.: `http://minio:9000`, ou terminados em `.internal`/`.local`/`.svc`). Fora disso é rejeitado e as imagens respondem 503. |
-| `STORAGE_BUCKET` | para imagens | Nome do bucket (precisa existir e ser **privado**; a API não o cria). |
-| `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY` | para imagens | Credenciais de um usuário do MinIO com acesso **só a esse bucket** (ver abaixo). Segredos: só nas variáveis do serviço. |
-| `STORAGE_REGION` | não | Padrão `us-east-1` (o MinIO aceita qualquer valor). |
-| `STORAGE_FORCE_PATH_STYLE` | não | Padrão `true` (necessário na maioria dos MinIO). `false` para virtual-host (ex.: AWS S3). |
-| `EXTRAIR_LIMITE_DIARIO` | não | Teto de leituras por IA por usuário por dia (America/Sao_Paulo), padrão 30. Fica no banco (tabela `boletos_extracoes_uso`, migration 019); ao estourar, 429 "Limite diário de leituras por IA atingido". |
-| `BOLETOS_RETENCAO_DIAS` | não | Dias que um boleto excluído (soft delete) e as imagens ficam retidos antes da limpeza definitiva. **Sem ela (ou inválida), a limpeza não apaga nada.** |
-| `EXTRAIR_RATE_LIMIT_MAX` | não | Leituras por imagem por usuário por minuto (padrão 10). |
-
-### Imagens dos boletos (MinIO / S3)
-- **Armazenamento:** serviço externo S3-compatível, **MinIO**, acessado só por `STORAGE_*`. A API não tem volume nem diretório de uploads. Sem `STORAGE_*` completo e válido a API sobe normalmente e as rotas de anexo respondem 503 "Armazenamento de imagens não configurado".
-- **Fluxo:** `POST /api/boletos/extrair` lê a imagem **em memória** e não grava nada. A imagem só vai ao bucket quando o usuário **confirma** o boleto (anexo enviado depois de salvar). Imagens só saem por `GET /api/boletos/:id/anexo` (com checagem de acesso ao restaurante); o bucket nunca é público nem usa URL pré-assinada.
-- **CORS:** a API expõe os headers `Retry-After` e `Content-Disposition` ao navegador (front e API em hosts diferentes).
-- **MinIO no Easypanel (serviço separado, ou externo):**
-  1. Crie um serviço MinIO com volume persistente em `/data` e **troque as credenciais root**. O console fica na porta 9001; não o exponha publicamente sem necessidade.
-  2. Crie o bucket **privado** (sem política anônima), por exemplo `boletos`, com o `mc`:
-     ```bash
-     mc alias set prod https://minio.exemplo.com ROOT_USER ROOT_PASSWORD
-     mc mb --ignore-existing prod/boletos
-     mc anonymous set none prod/boletos
-     ```
-  3. Crie um usuário de **menor privilégio** só para o bucket (não use o root na API). Salve a policy abaixo em `boletos-rw.json`:
-     ```json
-     {
-       "Version": "2012-10-17",
-       "Statement": [
-         { "Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": ["arn:aws:s3:::boletos"] },
-         { "Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], "Resource": ["arn:aws:s3:::boletos/*"] }
-       ]
-     }
-     ```
-     ```bash
-     mc admin policy create prod boletos-rw boletos-rw.json
-     mc admin user add prod api-boletos SENHA_LONGA_E_ALEATORIA
-     mc admin policy attach prod boletos-rw --user api-boletos
-     ```
-     (versões antigas do `mc` usam `mc admin policy add` / `mc admin policy set`). Use `api-boletos` e a senha como `STORAGE_ACCESS_KEY`/`STORAGE_SECRET_KEY`.
-  4. Na API: `STORAGE_ENDPOINT` (URL https pública do MinIO, ou `http://<nome-interno>:9000` se estiver na mesma rede do Easypanel), `STORAGE_BUCKET=boletos` e as chaves.
-- **Imagem do MinIO:** o `minio/minio` e o `minio/mc` não existem mais no Docker Hub (conferido em 23/10/2026: o repositório não é encontrado) e o `quay.io/minio` exige login. O `docker-compose.yml` usa `cgr.dev/chainguard/minio:latest` (servidor + `mc`; troque pela variável `MINIO_IMAGE`). No Easypanel use o template/imagem de MinIO que o painel oferecer, ou um S3 gerenciado (Cloudflare R2, AWS S3, Backblaze B2).
-- Limite de **5 MB** por imagem (API valida; acima disso responde 413). O nginx do `frontend/nginx.conf` só serve o estático e **não faz proxy** da API (front e API em hosts diferentes), então não há `client_max_body_size` a ajustar nele. Se você colocar um proxy/CDN na frente da API, libere pelo menos 6 MB de corpo.
-- **Backup:** o banco guarda só a chave do objeto, então faça backup do **bucket junto do `pg_dump`**, na mesma janela. Opções: `mc mirror prod/boletos ./backup-boletos` (cópia dos objetos), backup do volume de dados do MinIO (`docker run --rm -v <volume_minio>:/data -v "$PWD":/bkp alpine tar czf /bkp/minio.tgz -C /data .`, de preferência com o MinIO parado) ou o versionamento/backup do provedor S3.
-- **Limpeza definitiva** (apaga boletos excluídos há mais de `BOLETOS_RETENCAO_DIAS`, anexos órfãos com os objetos do bucket e `boletos_ocorrencias` mais antigas que o mesmo prazo). Ordem: apaga a linha no banco e depois o objeto; se a exclusão do objeto falhar, só loga um aviso. **Para apagar os objetos o comando precisa de `STORAGE_*`** no ambiente em que roda; sem eles, limpa só o banco (os objetos ficam órfãos no bucket). `--dry-run` e `--confirmar` juntos dão erro de uso e nada é apagado. Rode primeiro a simulação, depois confirme:
-
-```bash
-docker exec <container-api> npm run limpar-boletos -- --dry-run
-docker exec <container-api> npm run limpar-boletos -- --confirmar
-```
-
-  No Easypanel use o terminal do serviço da API (mesmos comandos, sem `docker exec`). Para agendar, use cron do host chamando `docker exec ... --confirmar` ou um Cron Job do Easypanel com `npm run limpar-boletos -- --confirmar` na imagem da API (com as mesmas variáveis do banco e `STORAGE_*`). Sem `BOLETOS_RETENCAO_DIAS` nada é apagado. Faça `pg_dump` antes da primeira execução com `--confirmar`.
-- **LGPD:** as imagens contêm dados de terceiros (fornecedores, CNPJ, valores) e são enviadas ao Google para leitura. Use um plano **pago** da API do Gemini (o gratuito pode usar o conteúdo para melhorar produtos) e informe isso a quem for responsável pelos dados.
 
 ### URL da API no front (`REACT_APP_API_URL`)
 O CRA embute `REACT_APP_*` no JavaScript **na hora do build**. Variável de ambiente do container em runtime não muda nada.
@@ -94,7 +40,7 @@ O CRA embute `REACT_APP_*` no JavaScript **na hora do build**. Variável de ambi
 
 ## Rodar tudo localmente com Docker
 
-Valida as imagens de produção com um Postgres e um MinIO descartáveis:
+Valida as imagens de produção com um Postgres descartável:
 
 ```bash
 export JWT_SECRET=$(openssl rand -hex 32)      # PowerShell: $env:JWT_SECRET = -join ((1..32) | % { '{0:x2}' -f (Get-Random -Max 256) })
@@ -102,7 +48,6 @@ docker compose up --build
 ```
 
 - Front: `http://localhost:8080` (mude com `WEB_PORT`), API: `http://localhost:5000/api/health`.
-- MinIO local: serviço `minio` (volume `minio_data`, onde as imagens ficam) e `minio-init`, que cria o bucket privado `${STORAGE_BUCKET:-boletos}` (idempotente) e termina; a `api` só sobe depois. Console em `http://localhost:9001` e S3 em `:9000`, publicados só em `127.0.0.1`. As credenciais padrão (`minioadmin`/`minioadmin`) são **só para uso local**; defina `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` se a máquina for compartilhada. Aqui a API usa o usuário root por simplicidade; em produção use o usuário restrito.
 - Criar o admin (`admin` / `admin123`, **troque a senha em seguida**): `docker compose exec api node database/create_admin.js`.
 - Apagar tudo, inclusive o banco: `docker compose down -v`.
 - A URL da API embutida no front é `http://localhost:5000/api`. Para outra, passe `REACT_APP_API_URL` ao `docker compose build`.
@@ -132,18 +77,8 @@ O `docker-compose.yml` serve só para isso; o Easypanel não o usa.
 ### Atenção: homologação e produção ainda não têm 016 e 017
 O código antigo ainda roda nos dois ambientes. O **primeiro deploy do código novo aplica a 016 (rename para `usuario_restaurantes`) e a 017 (`DROP` de gastos/estoque e flags legadas)**. Elas ainda **NÃO** foram aplicadas lá. Faça o `pg_dump` antes e publique API e web juntos.
 
-## Problemas comuns
-
-- **`Cannot find module '/app/server.js'`:** o Easypanel está com um comando de início antigo (override do `CMD`) ou com uma imagem antiga do tempo do builder Nixpacks. Apague o Comando de Início do serviço e use o builder **Dockerfile**. Se o serviço não reconstruir a imagem, recrie o serviço.
-- **"Erro de CORS" no navegador:** quase sempre é um 502 do proxy por porta errada no domínio (web **80**, API **5000**); o navegador mostra como CORS porque a resposta do proxy não traz os headers. A API usa `cors()` aberto e o token vai por header `Authorization`, então CORS em si raramente é a causa.
-- **`GET /api/health/ready` lista migrations pendentes (016/017):** a 017 faz `DROP` de gastos/estoque e flags legadas; faça `pg_dump` antes e rode `node database/migrate.js` (ou redeploy com `RUN_MIGRATIONS` ligado). Ver a seção de ordem segura de deploy abaixo.
-
 ## Verificado (23/10/2026)
 `docker compose up --build` (Docker 27 no WSL): as três imagens constroem; a API aplica as 17 migrations e sobe como `healthy`; `GET /api/health` e `/api/health/ready` respondem 200; o web responde 200 e devolve `index.html` em rotas desconhecidas (fallback de SPA); `POST /api/login` com credencial inválida devolve 401; `create_admin.js` roda dentro do container; `docker stop` encerra a API com graciosidade em cerca de 1 s. Não testado: login e fluxo de boletos pela interface, e o deploy real no Easypanel.
-
-Feature de boleto por imagem (23/10/2026, Docker 27 no WSL): `docker compose config` válido; `minio` fica `healthy` e `minio-init` cria o bucket `boletos` privado e termina com código 0 (repetível); `docker build ./backend` conclui e `@aws-sdk/client-s3` carrega no Node 18.20.8 da imagem (o `npm ci` emite `EBADENGINE` de duas dependências transitivas que pedem Node 20, `@aws-sdk/util-locate-window` e `brace-expansion`; são só avisos). **Não** validado ainda: a stack completa com a `api` falando com o MinIO (upload/download de anexo) e `limpar-boletos` dentro da imagem. Rode `docker compose up --build` e `docker compose exec api npm run limpar-boletos -- --dry-run` antes de publicar.
-
-**Imagens existentes:** a feature ainda não foi publicada (`main` e `homologacao` não têm a migration 018 nem o código de anexos), então não há imagens em volume local a migrar. Se algum ambiente de teste tiver imagens num antigo `/data/uploads`, copie-as manualmente para o bucket (`mc cp --recursive`, mantendo a chave gravada em `boletos_anexos.storage_chave`).
 
 ## Pontos em aberto frente à documentação do Easypanel (builder Dockerfile)
 - **`HEALTHCHECK` no Dockerfile:** a página do builder não fala de healthcheck, então não confirmei como o Easypanel o trata. No Docker funciona (containers `healthy`). Se a API for reiniciada em loop no primeiro deploy, suspeite de migrations que passam de ~2 min (40 s de `start-period` + 3 tentativas de 30 s) e aumente o `--start-period`.

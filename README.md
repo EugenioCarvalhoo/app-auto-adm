@@ -31,14 +31,7 @@ npm run create-admin                     # admin / admin123 — troque a senha
 npm run dev                              # API em :5000 e front em :3000
 ```
 
-O `install-all` **não** instala o backend: sem o `npm install` em `backend/`, `nodemon` e `tsx` não são reconhecidos. No frontend, `npm start` usa `cross-env`; se não for reconhecido, rode `npm install` em `frontend/` (em Linux/WSL também existe `npm run start:unix`). Acesse `http://localhost:3000`.
-
-### Solução de problemas
-- **`nodemon`/`tsx` não reconhecido:** falta `npm install` em `backend/`.
-- **`cross-env` não reconhecido:** falta `npm install` em `frontend/`.
-- **Erro de conexão com o banco:** confira se o PostgreSQL está no ar e as credenciais em `backend/.env`.
-- **Migrations falham:** o banco precisa existir e o usuário precisa de permissão para criar tabelas.
-- **Porta em uso:** mude `PORT` em `backend/.env` (e a URL da API no front, em `frontend/src/config.ts` ou `REACT_APP_API_URL`).
+Detalhes e solução de problemas: [setup.md](./setup.md).
 
 ## Rodar com Docker
 ```bash
@@ -46,7 +39,7 @@ export JWT_SECRET=$(openssl rand -hex 32)
 docker compose up --build                # front em :8080, API em :5000
 docker compose exec api node database/create_admin.js
 ```
-Imagens, variáveis, `REACT_APP_API_URL` e passo a passo do Easypanel: [docs/DEPLOY-DOCKER.md](./docs/DEPLOY-DOCKER.md). Homologação: [docs/HOMOLOGACAO.md](./docs/HOMOLOGACAO.md).
+Imagens, variáveis, `REACT_APP_API_URL` e passo a passo do Easypanel: [docs/DEPLOY-DOCKER.md](./docs/DEPLOY-DOCKER.md).
 
 ## Testes
 ```bash
@@ -72,7 +65,7 @@ Veja [TESTING.md](./TESTING.md).
 │   ├── nginx.conf
 │   └── Dockerfile
 ├── e2e/                     # Playwright
-├── docs/                    # histórico, plano de ação, DEPLOY-DOCKER, HOMOLOGACAO, deploy/ (guias históricos)
+├── docs/                    # histórico, plano de ação, deploy com Docker
 ├── docker-compose.yml       # stack local (db + api + web)
 └── .github/workflows/       # CI e deploy
 ```

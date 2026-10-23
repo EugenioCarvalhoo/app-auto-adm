@@ -6,7 +6,6 @@ import pool from './db';
 import authRouter from './routes/auth';
 import restaurantesRouter from './routes/restaurantes';
 import boletosRouter from './routes/boletos';
-import boletosImagemRouter from './routes/boletosImagem';
 import adminRouter from './routes/admin';
 import healthRouter from './routes/health';
 import { migracoesPendentes } from './lib/migracoes';
@@ -24,11 +23,10 @@ app.use((req, res, next) => {
 // Middleware
 app.use(cors({
   credentials: true,
-  exposedHeaders: ['Retry-After', 'Content-Disposition'],
   maxAge: 86400
 }));
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Uma linha por requisição ao fim da resposta — confirma se o proxy chega no Node (LOG_HTTP=0 desliga)
 if (
@@ -49,7 +47,6 @@ if (
 // Cada router declara o caminho completo (/api/...), então todos montam na raiz.
 app.use(authRouter);
 app.use(restaurantesRouter);
-app.use(boletosImagemRouter);
 app.use(boletosRouter);
 app.use(adminRouter);
 app.use(healthRouter);

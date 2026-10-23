@@ -3,16 +3,13 @@ import type { Tela, UsuarioPermissao } from '../types';
 export interface Permissoes {
   admin: boolean;
   boletos: boolean;
-  /** Marcar boleto como pago. */
-  pagar: boolean;
 }
 
 /** Permissões efetivas do usuário (admin = tudo). */
 export function permissoesUsuario(user: UsuarioPermissao | null | undefined): Permissoes {
-  if (!user) return { admin: false, boletos: false, pagar: false };
-  if (user.is_admin) return { admin: true, boletos: true, pagar: true };
-  const boletos = !!user.modulo_boletos;
-  return { admin: false, boletos, pagar: boletos && !!user.pode_marcar_pago };
+  if (!user) return { admin: false, boletos: false };
+  if (user.is_admin) return { admin: true, boletos: true };
+  return { admin: false, boletos: !!user.modulo_boletos };
 }
 
 export function usuarioTemAlgumModulo(user: UsuarioPermissao | null | undefined): boolean {

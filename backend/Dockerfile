@@ -16,9 +16,6 @@ COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY database ./database
-# scripts/limpar-boletos.js (npm run limpar-boletos) usa o storage compilado em dist/.
-# As imagens dos boletos ficam em um servico S3-compativel (MinIO) via STORAGE_*; a imagem nao tem volume.
-COPY scripts ./scripts
 
 # Roda sem root
 USER node

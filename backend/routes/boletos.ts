@@ -1,5 +1,4 @@
 import express from 'express';
-import type { Response } from 'express';
 import pool from '../db';
 import { authenticateToken } from '../middleware/auth';
 import { requireModuloBoletos, loadUserFlags, assertBoletosAcessoRestaurante } from '../middleware/permissoes';
@@ -18,8 +17,6 @@ import {
   META_SELECT
 } from '../lib/boletos';
 import type { BoletoRow, MetaRow } from '../lib/boletos';
-import { normalizarFornecedor, sanearFornecedor, fornecedorValido } from '../lib/fornecedor';
-import { normalizarLinhaDigitavel, validarLinhaDigitavel } from '../lib/linhaDigitavel';
 
 interface SemanaResumo {
   chave: string;
@@ -31,64 +28,6 @@ interface SemanaResumo {
 }
 
 const router = express.Router();
-
-const MSG_BOLETO_PAGO = 'Boleto pago: peça ao administrador para desfazer o pagamento ou alterar.';
-const MSG_LINHA_DUPLICADA = 'Esta linha digitável já está cadastrada.';
-
-/** Linha do body: ausente/vazia => null; preenchida => normalizada e validada (47/48 dígitos + DVs). */
-function parseLinhaBody(raw: unknown): { linha: string | null } | { erro: string } {
-  if (raw === undefined || raw === null || String(raw).trim() === '') return { linha: null };
-  const r = validarLinhaDigitavel(raw);
-  if (!r.valida) {
-    return { erro: 'Linha digitável inválida. Confira os 47 dígitos (boleto) ou 48 dígitos (concessionária).' };
-  }
-  return { linha: r.linha };
-}
-
-/** Busca GLOBAL (todos os restaurantes) de boleto não excluído com a linha; uso interno, nunca devolver ao cliente. */
-async function buscarBoletoPorLinha(linha: string, ignorarId?: number): Promise<number | null> {
-  const r = await pool.query<{ id: number }>(
-    'SELECT id FROM boletos_notas WHERE linha_digitavel = $1 AND deleted_at IS NULL AND id <> $2 LIMIT 1',
-    [linha, ignorarId ?? 0]
-  );
-  return r.rows[0] ? r.rows[0].id : null;
-}
-
-function ehViolacaoLinhaUnica(error: unknown): boolean {
-  return (
-    codigoErro(error) === '23505' &&
-    (error as { constraint?: unknown }).constraint === 'uq_boletos_notas_linha_digitavel'
-  );
-}
-
-/** Registra a ocorrência para o admin e responde 409 genérico (sem dados do boleto existente). */
-async function responderLinhaDuplicada(
-  res: Response,
-  usuarioId: number,
-  restauranteId: number | null,
-  linha: string
-): Promise<Response> {
-  try {
-    const existenteId = linha ? await buscarBoletoPorLinha(linha) : null;
-    const rid = restauranteId != null && !Number.isNaN(restauranteId) ? restauranteId : null;
-    // Não repete a ocorrência ainda não vista do mesmo usuário/restaurante/linha.
-    await pool.query(
-      `INSERT INTO boletos_ocorrencias (tipo, usuario_id, restaurante_id, boleto_existente_id, linha_digitavel)
-       SELECT 'linha_duplicada', $1::int, $2::int, $3::int, $4::varchar
-       WHERE NOT EXISTS (
-         SELECT 1 FROM boletos_ocorrencias
-         WHERE tipo = 'linha_duplicada' AND visto_em IS NULL
-           AND usuario_id IS NOT DISTINCT FROM $1::int
-           AND restaurante_id IS NOT DISTINCT FROM $2::int
-           AND linha_digitavel IS NOT DISTINCT FROM $4::varchar
-       )`,
-      [usuarioId, rid, existenteId, linha || null]
-    );
-  } catch (error) {
-    console.error('Erro ao registrar ocorrência de linha duplicada:', error);
-  }
-  return res.status(409).json({ error: MSG_LINHA_DUPLICADA, codigo: 'LINHA_DUPLICADA' });
-}
 
 // ========== Boletos e notas ==========
 
@@ -103,7 +42,7 @@ router.get('/api/boletos/resumo', authenticateToken, requireModuloBoletos, async
 
     const [boletos, metas] = await Promise.all([
       pool.query<BoletoRow>(
-        `SELECT ${BOLETO_SELECT} FROM boletos_notas WHERE restaurante_id = $1 AND deleted_at IS NULL ORDER BY dt_recebimento ASC, id ASC`,
+        `SELECT ${BOLETO_SELECT} FROM boletos_notas WHERE restaurante_id = $1 ORDER BY dt_recebimento ASC, id ASC`,
         [rid]
       ),
       pool.query<MetaRow>(
@@ -168,7 +107,7 @@ router.get('/api/boletos', authenticateToken, requireModuloBoletos, async (req, 
     const pode = await assertBoletosAcessoRestaurante(req, res, rid);
     if (!pode) return;
     const result = await pool.query<BoletoRow>(
-      `SELECT ${BOLETO_SELECT} FROM boletos_notas WHERE restaurante_id = $1 AND deleted_at IS NULL ORDER BY dt_recebimento DESC NULLS LAST, id DESC`,
+      `SELECT ${BOLETO_SELECT} FROM boletos_notas WHERE restaurante_id = $1 ORDER BY dt_recebimento DESC NULLS LAST, id DESC`,
       [rid]
     );
     res.json(result.rows.map(enriquecerBoleto));
@@ -213,58 +152,14 @@ router.post('/api/boletos', authenticateToken, requireModuloBoletos, async (req,
       }
     }
 
-    if (!fornecedorValido(body.fornecedor)) {
-      return res.status(400).json({ error: 'Fornecedor inválido' });
-    }
-    const fornecedor = sanearFornecedor(body.fornecedor);
-    const fornecedorNorm = fornecedor ? normalizarFornecedor(fornecedor) || null : null;
-    const linhaParse = parseLinhaBody(body.linha_digitavel);
-    if ('erro' in linhaParse) {
-      return res.status(400).json({ error: linhaParse.erro });
-    }
-    // Linha digitável só faz sentido em boleto.
-    const linha = tipo === 'Boleto' ? linhaParse.linha : null;
-    if (linha) {
-      const existente = await buscarBoletoPorLinha(linha);
-      if (existente) {
-        return responderLinhaDuplicada(res, req.user!.id, rid, linha);
-      }
-    }
-
-    if (body.confirmar_similar !== true && fornecedorNorm) {
-      const similares = await pool.query<BoletoRow>(
-        `SELECT ${BOLETO_SELECT} FROM boletos_notas
-         WHERE restaurante_id = $1 AND deleted_at IS NULL AND fornecedor_norm = $2
-           AND (dt_recebimento = $3 OR ($4::date IS NOT NULL AND dt_vencimento = $4::date))
-         ORDER BY dt_recebimento DESC, id DESC
-         LIMIT 10`,
-        [rid, fornecedorNorm, dtRecebimento, dtVencimento]
-      );
-      if (similares.rows.length > 0) {
-        return res.status(409).json({
-          error: 'Já existe um lançamento parecido (mesmo fornecedor e mesma data). Confirme para cadastrar mesmo assim.',
-          codigo: 'BOLETO_SIMILAR',
-          similar: true,
-          boletos: similares.rows.map(enriquecerBoleto)
-        });
-      }
-    }
-
-    const ins = await pool.query<{ id: number }>(
-      `INSERT INTO boletos_notas
-         (restaurante_id, usuario_id, dt_recebimento, dt_vencimento, descricao, valor, tipo, fornecedor, fornecedor_norm, linha_digitavel)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       RETURNING id`,
-      [rid, req.user!.id, dtRecebimento, dtVencimento, descricao, valor, tipo, fornecedor, fornecedorNorm, linha]
+    const result = await pool.query<BoletoRow>(
+      `INSERT INTO boletos_notas (restaurante_id, usuario_id, dt_recebimento, dt_vencimento, descricao, valor, tipo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING ${BOLETO_SELECT}`,
+      [rid, req.user!.id, dtRecebimento, dtVencimento, descricao, valor, tipo]
     );
-    const result = await pool.query<BoletoRow>(`SELECT ${BOLETO_SELECT} FROM boletos_notas WHERE id = $1`, [ins.rows[0].id]);
     res.status(201).json(enriquecerBoleto(result.rows[0]));
   } catch (error) {
-    if (ehViolacaoLinhaUnica(error)) {
-      const body = req.body || {};
-      const linha = normalizarLinhaDigitavel(body.linha_digitavel);
-      return responderLinhaDuplicada(res, req.user!.id, parseInt(String(body.restaurante_id), 10), linha);
-    }
     if (erroTabelaBoletos(error, res)) return;
     console.error('Erro ao criar boleto:', error);
     res.status(500).json({ error: 'Erro ao cadastrar boleto ou nota' });
@@ -272,29 +167,18 @@ router.post('/api/boletos', authenticateToken, requireModuloBoletos, async (req,
 });
 
 router.put('/api/boletos/:id', authenticateToken, requireModuloBoletos, async (req, res) => {
-  let restauranteIdDoBoleto: number | null = null;
   try {
     const id = parseInt(req.params.id, 10);
     if (Number.isNaN(id)) {
       return res.status(400).json({ error: 'id inválido' });
     }
-    const existing = await pool.query<BoletoRow>(
-      `SELECT ${BOLETO_SELECT} FROM boletos_notas WHERE id = $1 AND deleted_at IS NULL`,
-      [id]
-    );
+    const existing = await pool.query<BoletoRow>(`SELECT ${BOLETO_SELECT} FROM boletos_notas WHERE id = $1`, [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Lançamento não encontrado' });
     }
     const atual = existing.rows[0];
     const pode = await assertBoletosAcessoRestaurante(req, res, atual.restaurante_id);
     if (!pode) return;
-    restauranteIdDoBoleto = atual.restaurante_id;
-    if (atual.pago) {
-      const flagsPut = await loadUserFlags(req.user!.id);
-      if (!flagsPut || !flagsPut.is_admin) {
-        return res.status(403).json({ error: MSG_BOLETO_PAGO });
-      }
-    }
 
     const body = req.body || {};
     const descricao = body.descricao !== undefined ? String(body.descricao).trim() : atual.descricao;
@@ -327,56 +211,29 @@ router.put('/api/boletos/:id', authenticateToken, requireModuloBoletos, async (r
       return res.status(400).json({ error: 'Data de vencimento é obrigatória para boleto' });
     }
 
-    if (!fornecedorValido(body.fornecedor)) {
-      return res.status(400).json({ error: 'Fornecedor inválido' });
-    }
-    const fornecedor = body.fornecedor !== undefined ? sanearFornecedor(body.fornecedor) : atual.fornecedor;
-    const fornecedorNorm = fornecedor ? normalizarFornecedor(fornecedor) || null : null;
-    let linha: string | null = atual.linha_digitavel;
-    if (body.linha_digitavel !== undefined) {
-      const linhaParse = parseLinhaBody(body.linha_digitavel);
-      if ('erro' in linhaParse) {
-        return res.status(400).json({ error: linhaParse.erro });
-      }
-      linha = linhaParse.linha;
-    }
-    if (tipo === 'Sem Boleto') linha = null;
-    if (linha && linha !== atual.linha_digitavel) {
-      const existente = await buscarBoletoPorLinha(linha, id);
-      if (existente) {
-        return responderLinhaDuplicada(res, req.user!.id, atual.restaurante_id, linha);
-      }
-    }
-
-    await pool.query(
+    const result = await pool.query<BoletoRow>(
       `UPDATE boletos_notas
-       SET dt_recebimento = $1, dt_vencimento = $2, descricao = $3, valor = $4, tipo = $5,
-           fornecedor = $7, fornecedor_norm = $8, linha_digitavel = $9, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $6 AND restaurante_id = $10 AND deleted_at IS NULL`,
-      [dtRecebimento, dtVencimento, descricao, valor, tipo, id, fornecedor, fornecedorNorm, linha, atual.restaurante_id]
+       SET dt_recebimento = $1, dt_vencimento = $2, descricao = $3, valor = $4, tipo = $5, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $6
+       RETURNING ${BOLETO_SELECT}`,
+      [dtRecebimento, dtVencimento, descricao, valor, tipo, id]
     );
-    const result = await pool.query<BoletoRow>(`SELECT ${BOLETO_SELECT} FROM boletos_notas WHERE id = $1`, [id]);
     res.json(enriquecerBoleto(result.rows[0]));
   } catch (error) {
-    if (ehViolacaoLinhaUnica(error)) {
-      const body = req.body || {};
-      return responderLinhaDuplicada(res, req.user!.id, restauranteIdDoBoleto, normalizarLinhaDigitavel(body.linha_digitavel));
-    }
     if (erroTabelaBoletos(error, res)) return;
     console.error('Erro ao atualizar boleto:', error);
     res.status(500).json({ error: 'Erro ao atualizar boleto ou nota' });
   }
 });
 
-// Soft delete: marca deleted_at; imagem e linha ficam até o comando de limpeza (scripts/limpar-boletos.js).
 router.delete('/api/boletos/:id', authenticateToken, requireModuloBoletos, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (Number.isNaN(id)) {
       return res.status(400).json({ error: 'id inválido' });
     }
-    const existing = await pool.query<{ restaurante_id: number; created_at: Date; pago: boolean }>(
-      'SELECT restaurante_id, created_at, pago FROM boletos_notas WHERE id = $1 AND deleted_at IS NULL',
+    const existing = await pool.query<{ restaurante_id: number; created_at: Date }>(
+      'SELECT restaurante_id, created_at FROM boletos_notas WHERE id = $1',
       [id]
     );
     if (existing.rows.length === 0) {
@@ -386,9 +243,6 @@ router.delete('/api/boletos/:id', authenticateToken, requireModuloBoletos, async
     if (!pode) return;
     const flags = await loadUserFlags(req.user!.id);
     if (!flags || !flags.is_admin) {
-      if (existing.rows[0].pago) {
-        return res.status(403).json({ error: MSG_BOLETO_PAGO });
-      }
       const criado = new Date(existing.rows[0].created_at).getTime();
       const passouUmDia = !Number.isFinite(criado) || Date.now() - criado > 24 * 60 * 60 * 1000;
       if (passouUmDia) {
@@ -397,12 +251,7 @@ router.delete('/api/boletos/:id', authenticateToken, requireModuloBoletos, async
         });
       }
     }
-    await pool.query(
-      `UPDATE boletos_notas
-       SET deleted_at = CURRENT_TIMESTAMP, deleted_by_usuario_id = $2, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $1 AND deleted_at IS NULL`,
-      [id, req.user!.id]
-    );
+    await pool.query('DELETE FROM boletos_notas WHERE id = $1', [id]);
     res.json({ message: 'Lançamento removido', id });
   } catch (error) {
     if (erroTabelaBoletos(error, res)) return;

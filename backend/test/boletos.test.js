@@ -90,7 +90,7 @@ describe('boletos', () => {
 
     it('não apaga boleto de outro restaurante pelo id', async () => {
       await request(env.app).delete('/api/boletos/20').set(auth(U.gerenteA)).expect(403);
-      expect((await env.um('SELECT deleted_at FROM boletos_notas WHERE id = 20')).deleted_at).toBeNull();
+      expect(await env.um('SELECT id FROM boletos_notas WHERE id = 20')).toBeDefined();
     });
 
     it('não altera meta de outro restaurante', async () => {
@@ -187,25 +187,17 @@ describe('boletos', () => {
       await request(env.app).put('/api/boletos/abc').set(auth(U.admin)).send({}).expect(400);
     });
 
-    it('usuário comum exclui (soft delete) lançamento criado há menos de 1 dia', async () => {
+    it('usuário comum exclui lançamento criado há menos de 1 dia', async () => {
       await request(env.app).delete('/api/boletos/10').set(auth(U.gerenteA)).expect(200);
-      const linha = await env.um('SELECT deleted_at, deleted_by_usuario_id FROM boletos_notas WHERE id = 10');
-      expect(linha.deleted_at).toBeInstanceOf(Date);
-      expect(linha.deleted_by_usuario_id).toBe(2);
-      const lista = await request(env.app).get('/api/boletos?restaurante_id=1').set(auth(U.gerenteA)).expect(200);
-      expect(lista.body.map((b) => b.id)).not.toContain(10);
-      const resumo = await request(env.app).get('/api/boletos/resumo?restaurante_id=1').set(auth(U.gerenteA)).expect(200);
-      expect(resumo.body.total_geral).toBe(0);
+      expect(await env.um('SELECT id FROM boletos_notas WHERE id = 10')).toBeUndefined();
     });
 
     it('usuário comum NÃO exclui lançamento com mais de 1 dia; admin exclui', async () => {
       await env.rows("UPDATE boletos_notas SET created_at = now() - interval '3 days' WHERE id = 10");
       await request(env.app).delete('/api/boletos/10').set(auth(U.gerenteA)).expect(403);
-      expect((await env.um('SELECT deleted_at FROM boletos_notas WHERE id = 10')).deleted_at).toBeNull();
+      expect(await env.um('SELECT id FROM boletos_notas WHERE id = 10')).toBeDefined();
       await request(env.app).delete('/api/boletos/10').set(auth(U.admin)).expect(200);
-      const linha = await env.um('SELECT deleted_at, deleted_by_usuario_id FROM boletos_notas WHERE id = 10');
-      expect(linha.deleted_at).toBeInstanceOf(Date);
-      expect(linha.deleted_by_usuario_id).toBe(1);
+      expect(await env.um('SELECT id FROM boletos_notas WHERE id = 10')).toBeUndefined();
     });
   });
 

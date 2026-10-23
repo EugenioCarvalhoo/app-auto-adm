@@ -1,0 +1,8 @@
+NODE_ENV=production
+PORT=5000
+DB_HOST=seu-servidor.easypanel.io
+DB_PORT=5433
+DB_NAME=controle_financeiro
+DB_USER=postgres
+DB_PASSWORD=sua-senha-postgres-aqui
+JWT_SECRET=xK9mP2qR7vT4wY8zA1bC3dE5fG6hI0jK2lM4nO6pQ8rS

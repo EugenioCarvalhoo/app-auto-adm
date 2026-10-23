@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Como usar o controle de estoque</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 2rem 1.5rem 3rem;
+      max-width: 44rem;
+      margin-left: auto;
+      margin-right: auto;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 17px;
+      line-height: 1.55;
+      color: #000;
+      background: #fff;
+    }
+    h1 {
+      font-size: 1.65rem;
+      font-weight: 700;
+      margin: 0 0 0.5rem;
+      line-height: 1.25;
+    }
+    .sub {
+      font-size: 0.95rem;
+      margin: 0 0 2rem;
+      color: #333;
+    }
+    h2 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin: 2rem 0 0.75rem;
+      border-bottom: 1px solid #000;
+      padding-bottom: 0.2rem;
+    }
+    p { margin: 0 0 1rem; }
+    ul, ol { margin: 0 0 1rem; padding-left: 1.35rem; }
+    li { margin-bottom: 0.4rem; }
+    strong { font-weight: 700; }
+    .caixa {
+      border: 1px solid #000;
+      padding: 1rem 1.1rem;
+      margin: 1.25rem 0;
+      background: #fafafa;
+    }
+    .caixa p:last-child { margin-bottom: 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      border: 1px solid #000;
+      padding: 0.5rem 0.65rem;
+      text-align: left;
+    }
+    th { background: #eee; font-weight: 700; }
+    .dica {
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid #ccc;
+      font-size: 0.95rem;
+    }
+    footer {
+      margin-top: 2.5rem;
+      font-size: 0.85rem;
+      color: #444;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Como funciona o controle de estoque</h1>
+  <p class="sub">Guia simples para o dia a dia do restaurante ou da loja.</p>
+
+  <h2>Ideia principal</h2>
+  <p>O sistema guarda, para cada produto, uma <strong>quantidade atual em estoque</strong> (o saldo). Quando você registra um movimento:</p>
+  <ul>
+    <li><strong>Entrada</strong> — você informa <em>quantos itens chegaram</em>. O sistema <strong>soma</strong> isso ao saldo que já estava lá.</li>
+    <li><strong>Saída</strong> — você informa <em>quantos itens saíram</em> (uso, venda, perda, etc.). O sistema <strong>subtrai</strong> do saldo.</li>
+  </ul>
+  <p>O número que você digita no lançamento <strong>não é o total que você quer ter no fim</strong>: é <strong>só o que entrou ou saiu naquele momento</strong>.</p>
+
+  <div class="caixa">
+    <p><strong>Exemplo:</strong> está com <strong>1</strong> unidade em estoque. Chegaram mais <strong>10</strong> na compra.</p>
+    <p>Você escolhe <strong>Entrada</strong> e coloca a quantidade <strong>10</strong>. O saldo passa a ser <strong>11</strong> (1 + 10).</p>
+    <p>Se depois saírem <strong>3</strong> unidades, você escolhe <strong>Saída</strong> e coloca <strong>3</strong>. O saldo passa a ser <strong>8</strong> (11 − 3).</p>
+  </div>
+
+  <h2>Onde fazer os lançamentos</h2>
+  <p>Você pode registrar entrada e saída de dois jeitos (o resultado no estoque é o mesmo):</p>
+  <ol>
+    <li><strong>Aba “Itens”</strong> (ou “Lançar estoque”, para quem só usa estoque) — lista os produtos; em cada linha há o saldo atual, o tipo (entrada ou saída), a quantidade e um botão para confirmar. Há também atalhos de quantidade (por exemplo 1, 5, 10).</li>
+    <li><strong>Aba “Movimentação”</strong> — além do relatório por período, existe o <strong>lançamento rápido</strong>: você escolhe o produto, o tipo, a quantidade e confirma. Ali aparece o <strong>saldo atual</strong> do item selecionado para conferência.</li>
+  </ol>
+
+  <h2>Passo a passo de um lançamento</h2>
+  <ol>
+    <li>Confira se o <strong>restaurante</strong> (ou unidade) no topo da tela é o correto.</li>
+    <li>Localize o <strong>produto</strong> (ou escolha na lista do lançamento rápido).</li>
+    <li>Escolha <strong>Entrada</strong> ou <strong>Saída</strong> — sempre olhe esse campo antes de confirmar.</li>
+    <li>Digite a <strong>quantidade em número inteiro</strong> (sem vírgula): é quantos itens entram ou saem neste lançamento.</li>
+    <li>Opcional: preencha <strong>observação</strong> (ex.: “compra fornecedor X”, “quebra”, “degustação”).</li>
+    <li>Clique para <strong>confirmar</strong> o lançamento. Na tela de itens, em muitos casos, aparece uma prévia do saldo após o lançamento antes de você salvar.</li>
+  </ol>
+
+  <h2>Se a saída for maior que o estoque</h2>
+  <p>O sistema não deixa o saldo ficar negativo. Se você tentar uma saída maior do que a quantidade em estoque, aparece uma mensagem de erro — ajuste a quantidade ou confira se não faltou registrar uma entrada.</p>
+
+  <h2>Tela “Movimentação” e relatórios</h2>
+  <p>Nessa aba você vê <strong>resumo por período</strong> (entradas, saídas, lista recente). Use as datas “De” e “Até” e o botão para aplicar o período, ou os atalhos de semana, para conferir o histórico. Os lançamentos errados podem ser estornados onde o sistema oferecer essa opção (conforme permissão do usuário).</p>
+
+  <h2>Cadastro de produtos e categorias</h2>
+  <p>Quem tem perfil de <strong>administrador</strong> pode cadastrar <strong>categorias</strong>, <strong>produtos</strong> e a <strong>quantidade inicial</strong> ao criar um item novo. O dia a dia de entrada e saída é feito pelos lançamentos, como descrito acima — não é necessário “substituir” o número total do estoque a cada compra, a menos que alguém faça um ajuste de inventário por orientação do administrador.</p>
+
+  <div class="dica">
+    <p><strong>Dicas rápidas:</strong></p>
+    <ul>
+      <li>Sempre confira se está em <strong>Entrada</strong> ou <strong>Saída</strong> antes de salvar.</li>
+      <li>Use o <strong>saldo atual</strong> mostrado na tela para bater com a gôndola ou o depósito.</li>
+      <li>Se algo não bater, revise o último lançamento (tipo e quantidade) antes de acionar o suporte.</li>
+    </ul>
+  </div>
+
+  <footer>
+    Documento informativo do módulo de estoque — linguagem simplificada para uso da equipe.
+  </footer>
+
+</body>
+</html>
