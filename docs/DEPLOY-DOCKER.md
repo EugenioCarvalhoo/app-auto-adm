@@ -1,6 +1,6 @@
 # Docker e deploy (Easypanel)
 
-Guia único e atual de containers. Os `*_EASYPANEL.md` da raiz são históricos de troubleshooting e citam comandos antigos (`node server.js`), que não existem mais.
+Guia único e atual de containers. Os antigos guias `*_EASYPANEL.md` foram removidos da raiz (recuperáveis pelo histórico do git).
 
 ## Imagens
 
