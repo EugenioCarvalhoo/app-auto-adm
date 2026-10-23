@@ -1,0 +1,48 @@
+# Stack completa para rodar/validar as imagens de produção localmente:
+#   docker compose up --build
+# Front em http://localhost:8080, API em http://localhost:5000/api, Postgres só na rede interna.
+# No Easypanel não se usa este arquivo: cada serviço (api, web, postgres) é criado separado.
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: controle_financeiro
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d controle_financeiro"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    environment:
+      PORT: 5000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: controle_financeiro
+      DB_USER: postgres
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      JWT_SECRET: ${JWT_SECRET:?defina a variavel JWT_SECRET antes de subir}
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        # Embutida no bundle em build: precisa ser a URL que o NAVEGADOR enxerga
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:5000/api}
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - api
+
+volumes:
+  pg_data:
