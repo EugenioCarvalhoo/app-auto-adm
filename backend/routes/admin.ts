@@ -1,25 +1,35 @@
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const pool = require('../db');
-const { authenticateToken } = require('../middleware/auth');
-const { requireAdmin } = require('../middleware/permissoes');
+import express from 'express';
+import bcrypt from 'bcryptjs';
+import type { Queryable } from '../lib/tipos';
+import pool from '../db';
+import { authenticateToken } from '../middleware/auth';
+import { requireAdmin } from '../middleware/permissoes';
+import { codigoErro } from '../lib/erros';
+
+interface UsuarioPermissoesRow {
+  id: number;
+  username: string;
+  nome: string;
+  is_admin: boolean | null;
+  modulo_boletos: boolean | null;
+}
 
 const router = express.Router();
 
 // ========== Admin: permissões por módulo ==========
 
-async function listarRestauranteIdsUsuario(userId, db = pool) {
-  const assoc = await db.query(
+async function listarRestauranteIdsUsuario(userId: number, db: Queryable = pool): Promise<number[]> {
+  const assoc = await db.query<{ restaurante_id: number }>(
     'SELECT restaurante_id FROM usuario_restaurantes WHERE usuario_id = $1 ORDER BY restaurante_id',
     [userId]
   );
   return assoc.rows.map((row) => row.restaurante_id);
 }
 
-async function sincronizarRestaurantesUsuario(client, userId, restauranteIds) {
+async function sincronizarRestaurantesUsuario(client: Queryable, userId: number, restauranteIds: unknown): Promise<number[]> {
   await client.query('DELETE FROM usuario_restaurantes WHERE usuario_id = $1', [userId]);
   const ids = Array.isArray(restauranteIds)
-    ? [...new Set(restauranteIds.map((x) => parseInt(x, 10)).filter((x) => !Number.isNaN(x)))]
+    ? [...new Set(restauranteIds.map((x) => parseInt(String(x), 10)).filter((x: number) => !Number.isNaN(x)))]
     : [];
   for (const rid of ids) {
     const ex = await client.query('SELECT id FROM restaurantes WHERE id = $1 AND ativo = true', [rid]);
@@ -35,7 +45,7 @@ async function sincronizarRestaurantesUsuario(client, userId, restauranteIds) {
 
 router.get('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const result = await pool.query(
+    const result = await pool.query<UsuarioPermissoesRow>(
       `SELECT u.id, u.username, u.nome, u.is_admin,
         COALESCE(u.modulo_boletos, false) AS modulo_boletos
        FROM usuarios u
@@ -58,7 +68,7 @@ router.get('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, as
     }
     res.json(rows);
   } catch (error) {
-    if (error.code === '42703') {
+    if (codigoErro(error) === '42703') {
       return res.status(503).json({ error: 'Migração de permissões pendente (014).' });
     }
     console.error('Erro ao listar permissões:', error);
@@ -90,7 +100,7 @@ router.post('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, a
 
     const restrito = true; // todo usuário não-admin precisa de restaurantes liberados
     const restauranteIds = Array.isArray(body.restaurante_ids)
-      ? body.restaurante_ids.map((x) => parseInt(x, 10)).filter((x) => !Number.isNaN(x))
+      ? body.restaurante_ids.map((x: unknown) => parseInt(String(x), 10)).filter((x: number) => !Number.isNaN(x))
       : [];
     if (restrito && restauranteIds.length === 0) {
       return res.status(400).json({
@@ -105,14 +115,14 @@ router.post('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, a
 
     const hash = await bcrypt.hash(password, 10);
     await client.query('BEGIN');
-    const ins = await client.query(
+    const ins = await client.query<{ id: number; username: string; nome: string }>(
       `INSERT INTO usuarios (username, password, nome, is_admin, modulo_boletos)
        VALUES ($1, $2, $3, false, $4)
        RETURNING id, username, nome`,
       [username, hash, nome, moduloBoletos]
     );
     const newUser = ins.rows[0];
-    let ids = [];
+    let ids: number[] = [];
     if (restrito) {
       ids = await sincronizarRestaurantesUsuario(client, newUser.id, restauranteIds);
       if (ids.length === 0) {
@@ -131,10 +141,10 @@ router.post('/api/admin/usuarios-permissoes', authenticateToken, requireAdmin, a
     });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
-    if (error.code === '42703') {
+    if (codigoErro(error) === '42703') {
       return res.status(503).json({ error: 'Migração de permissões pendente (014).' });
     }
-    if (error.code === '23505') {
+    if (codigoErro(error) === '23505') {
       return res.status(409).json({ error: 'Já existe usuário com este login.' });
     }
     console.error('Erro ao criar usuário:', error);
@@ -151,7 +161,7 @@ router.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin
     if (Number.isNaN(userId)) {
       return res.status(400).json({ error: 'id inválido' });
     }
-    const cur = await client.query('SELECT * FROM usuarios WHERE id = $1', [userId]);
+    const cur = await client.query<{ id: number; username: string; nome: string; is_admin: boolean }>('SELECT * FROM usuarios WHERE id = $1', [userId]);
     if (cur.rows.length === 0) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
@@ -168,10 +178,10 @@ router.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin
     const moduloBoletos = body.modulo_boletos;
 
     const restrito = true; // todo usuário não-admin precisa de restaurantes liberados
-    let restauranteIds = [];
+    let restauranteIds: number[] = [];
     if (restrito) {
       restauranteIds = Array.isArray(body.restaurante_ids)
-        ? body.restaurante_ids.map((x) => parseInt(x, 10)).filter((x) => !Number.isNaN(x))
+        ? body.restaurante_ids.map((x: unknown) => parseInt(String(x), 10)).filter((x: number) => !Number.isNaN(x))
         : await listarRestauranteIdsUsuario(userId);
       if (restauranteIds.length === 0) {
         return res.status(400).json({
@@ -208,7 +218,7 @@ router.put('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAdmin
     });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
-    if (error.code === '42703') {
+    if (codigoErro(error) === '42703') {
       return res.status(503).json({ error: 'Migração de permissões pendente (014).' });
     }
     console.error('Erro ao atualizar permissões:', error);
@@ -224,10 +234,10 @@ router.delete('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAd
     if (Number.isNaN(userId)) {
       return res.status(400).json({ error: 'id inválido' });
     }
-    if (userId === req.user.id) {
+    if (userId === req.user!.id) {
       return res.status(400).json({ error: 'Não é possível remover o próprio usuário.' });
     }
-    const cur = await pool.query('SELECT id, is_admin FROM usuarios WHERE id = $1', [userId]);
+    const cur = await pool.query<{ id: number; is_admin: boolean }>('SELECT id, is_admin FROM usuarios WHERE id = $1', [userId]);
     if (cur.rows.length === 0) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
@@ -237,7 +247,7 @@ router.delete('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAd
     await pool.query('DELETE FROM usuarios WHERE id = $1', [userId]);
     res.json({ message: 'Usuário removido', id: userId });
   } catch (error) {
-    if (error.code === '23503') {
+    if (codigoErro(error) === '23503') {
       return res.status(409).json({
         error: 'Este usuário ainda está ligado a outros registros e não pode ser removido.'
       });
@@ -247,4 +257,4 @@ router.delete('/api/admin/usuarios-permissoes/:id', authenticateToken, requireAd
   }
 });
 
-module.exports = router;
+export = router;

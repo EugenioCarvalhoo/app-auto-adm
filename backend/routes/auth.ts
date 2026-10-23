@@ -1,14 +1,22 @@
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const pool = require('../db');
-const { authenticateToken, JWT_SECRET } = require('../middleware/auth');
-const { shapeUserForClient } = require('../middleware/permissoes');
+import express from 'express';
+import type { Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import pool from '../db';
+import { authenticateToken, JWT_SECRET } from '../middleware/auth';
+import { shapeUserForClient } from '../middleware/permissoes';
+import type { UsuarioRow } from '../middleware/permissoes';
+import { mensagemErro, stackErro } from '../lib/erros';
+
+/** Linha completa de usuarios (SELECT *). */
+interface UsuarioCompleto extends UsuarioRow {
+  password: string;
+}
 
 const router = express.Router();
 
 // Auth Routes — login em /api/login e /login (proxy que remove o prefixo /api)
-async function loginHandler(req, res) {
+async function loginHandler(req: Request, res: Response): Promise<Response | void> {
   try {
     console.log('Tentativa de login recebida');
     const { username, password } = req.body;
@@ -18,7 +26,7 @@ async function loginHandler(req, res) {
     }
 
     console.log('Buscando usuário:', username);
-    const result = await pool.query(
+    const result = await pool.query<UsuarioCompleto>(
       'SELECT * FROM usuarios WHERE username = $1',
       [username]
     );
@@ -61,10 +69,10 @@ async function loginHandler(req, res) {
     });
   } catch (error) {
     console.error('Erro no login:', error);
-    console.error('Stack trace:', error.stack);
+    console.error('Stack trace:', stackErro(error));
     res.status(500).json({
       error: 'Erro ao fazer login',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      details: process.env.NODE_ENV === 'development' ? mensagemErro(error) : undefined
     });
   }
 }
@@ -75,7 +83,7 @@ router.post('/login', loginHandler);
 // Verify token
 router.get('/api/verify', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM usuarios WHERE id = $1', [req.user.id]);
+    const result = await pool.query<UsuarioRow>('SELECT * FROM usuarios WHERE id = $1', [req.user!.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
@@ -90,4 +98,4 @@ router.get('/api/verify', authenticateToken, async (req, res) => {
   }
 });
 
-module.exports = router;
+export = router;

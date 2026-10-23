@@ -1,12 +1,26 @@
-const express = require('express');
-const pool = require('../db');
-const { authenticateToken } = require('../middleware/auth');
-const {
+import express from 'express';
+import pool from '../db';
+import { authenticateToken } from '../middleware/auth';
+import {
   requireAdmin,
   loadUserFlags,
   usuarioRestaurantesRestritos,
   usuarioPodeRestaurante
-} = require('../middleware/permissoes');
+} from '../middleware/permissoes';
+
+/** Linha de restaurantes (SELECT *). */
+interface RestauranteRow {
+  id: number;
+  nome: string;
+  endereco: string | null;
+  telefone: string | null;
+  email: string | null;
+  cnpj: string | null;
+  observacoes: string | null;
+  ativo: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
 
 const router = express.Router();
 
@@ -15,22 +29,22 @@ const router = express.Router();
 // Get all restaurants
 router.get('/api/restaurantes', authenticateToken, async (req, res) => {
   try {
-    const flags = await loadUserFlags(req.user.id);
+    const flags = await loadUserFlags(req.user!.id);
     if (!flags) {
       return res.status(403).json({ error: 'Usuário inválido.' });
     }
     if (usuarioRestaurantesRestritos(flags)) {
-      const result = await pool.query(
+      const result = await pool.query<RestauranteRow>(
         `SELECT r.*
          FROM restaurantes r
          INNER JOIN usuario_restaurantes ur ON ur.restaurante_id = r.id AND ur.usuario_id = $1
          WHERE r.ativo = true
          ORDER BY r.nome ASC`,
-        [req.user.id]
+        [req.user!.id]
       );
       return res.json(result.rows);
     }
-    const result = await pool.query(
+    const result = await pool.query<RestauranteRow>(
       'SELECT * FROM restaurantes WHERE ativo = true ORDER BY nome ASC'
     );
     res.json(result.rows);
@@ -45,14 +59,14 @@ router.get('/api/restaurantes/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const rid = parseInt(id, 10);
-    const flags = await loadUserFlags(req.user.id);
+    const flags = await loadUserFlags(req.user!.id);
     if (flags && usuarioRestaurantesRestritos(flags)) {
-      const ok = await usuarioPodeRestaurante(req.user.id, rid);
+      const ok = await usuarioPodeRestaurante(req.user!.id, rid);
       if (!ok) {
         return res.status(403).json({ error: 'Sem acesso a este restaurante.' });
       }
     }
-    const result = await pool.query('SELECT * FROM restaurantes WHERE id = $1', [id]);
+    const result = await pool.query<RestauranteRow>('SELECT * FROM restaurantes WHERE id = $1', [id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Restaurante não encontrado' });
     }
@@ -125,4 +139,4 @@ router.delete('/api/restaurantes/:id', authenticateToken, requireAdmin, async (r
   }
 });
 
-module.exports = router;
+export = router;

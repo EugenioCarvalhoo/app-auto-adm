@@ -4,7 +4,15 @@
  * MES_SEMANA e SEMANA_MES existem na planilha e não são usadas em células.
  */
 
-function parseIsoDate(iso) {
+export type TipoBoleto = 'Boleto' | 'Sem Boleto';
+
+export interface IntervaloSemana {
+  inicio: string;
+  fim: string;
+  chave: string;
+}
+
+export function parseIsoDate(iso: unknown): Date | null {
   if (iso == null || iso === '') return null;
   const text = String(iso).slice(0, 10);
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
@@ -23,45 +31,45 @@ function parseIsoDate(iso) {
   return date;
 }
 
-function formatIso(date) {
+export function formatIso(date: Date): string {
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, '0');
   const day = String(date.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 
-function compactIso(date) {
+function compactIso(date: Date): string {
   return formatIso(date).replace(/-/g, '');
 }
 
-function addDays(date, days) {
+function addDays(date: Date, days: number): Date {
   const next = new Date(date.getTime());
   next.setUTCDate(next.getUTCDate() + days);
   return next;
 }
 
 /** Excel WEEKDAY(date, 2): segunda = 1 … domingo = 7. */
-function weekdayMonday1(date) {
+function weekdayMonday1(date: Date): number {
   const js = date.getUTCDay();
   return js === 0 ? 7 : js;
 }
 
 /** Excel WEEKDAY(date, 1): domingo = 1 … sábado = 7. */
-function weekdaySunday1(date) {
+function weekdaySunday1(date: Date): number {
   return date.getUTCDay() + 1;
 }
 
 /**
  * Excel WEEKNUM(date, 16): semana começa na segunda e a semana que contém 1º de janeiro é a semana 1.
  */
-function weekNumMondaySystem1(date) {
+function weekNumMondaySystem1(date: Date): number {
   const jan1 = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
   const mondayOfJan1 = addDays(jan1, -(weekdayMonday1(jan1) - 1));
   const diffDays = Math.round((date.getTime() - mondayOfJan1.getTime()) / 86400000);
   return Math.floor(diffDays / 7) + 1;
 }
 
-function intervaloSemana(iso) {
+export function intervaloSemana(iso: unknown): IntervaloSemana | null {
   const date = parseIsoDate(iso);
   if (!date) return null;
   const sabado = addDays(date, -((weekdayMonday1(date) + 1) % 7));
@@ -73,7 +81,7 @@ function intervaloSemana(iso) {
   };
 }
 
-function mesSemana(iso) {
+export function mesSemana(iso: unknown): string {
   const date = parseIsoDate(iso);
   if (!date) return '';
   const segunda = addDays(date, -((weekdayMonday1(date) - 1) % 7));
@@ -83,7 +91,7 @@ function mesSemana(iso) {
   return month + String(numero).padStart(2, '0');
 }
 
-function semanaMes(iso) {
+export function semanaMes(iso: unknown): string {
   const date = parseIsoDate(iso);
   if (!date) return '';
   const ancora = addDays(date, -((weekdaySunday1(date) + 1) % 7));
@@ -92,20 +100,20 @@ function semanaMes(iso) {
   return month + String(numero).padStart(2, '0');
 }
 
-function addDaysIso(iso, days) {
+export function addDaysIso(iso: unknown, days: number): string | null {
   const date = parseIsoDate(iso);
   if (!date) return null;
   return formatIso(addDays(date, days));
 }
 
-function normalizarTipo(tipo) {
+export function normalizarTipo(tipo: unknown): TipoBoleto {
   const text = String(tipo || '').trim().toLowerCase();
   if (text === 'sem boleto' || text === 'sem_boleto') return 'Sem Boleto';
   return 'Boleto';
 }
 
 /** Vencimento usado no agrupamento: sem boleto = recebimento + 7 dias. */
-function vencimentoEfetivo(dtRecebimento, dtVencimento, tipo) {
+export function vencimentoEfetivo(dtRecebimento: unknown, dtVencimento: unknown, tipo: unknown): string | null {
   const recebimento = parseIsoDate(dtRecebimento) ? String(dtRecebimento).slice(0, 10) : null;
   const vencimento = parseIsoDate(dtVencimento) ? String(dtVencimento).slice(0, 10) : null;
   if (!recebimento && !vencimento) return null;
@@ -116,22 +124,10 @@ function vencimentoEfetivo(dtRecebimento, dtVencimento, tipo) {
 }
 
 /** Semana do vencimento efetivo. Linha sem data de recebimento fica fora do total. */
-function grupoSemana(dtRecebimento, dtVencimento, tipo) {
+export function grupoSemana(dtRecebimento: unknown, dtVencimento: unknown, tipo: unknown): IntervaloSemana | null {
   const recebimento = parseIsoDate(dtRecebimento) ? String(dtRecebimento).slice(0, 10) : null;
   if (!recebimento) return null;
   const efetivo = vencimentoEfetivo(recebimento, dtVencimento, tipo);
   if (!efetivo) return null;
   return intervaloSemana(efetivo);
 }
-
-module.exports = {
-  parseIsoDate,
-  formatIso,
-  intervaloSemana,
-  mesSemana,
-  semanaMes,
-  addDaysIso,
-  normalizarTipo,
-  vencimentoEfetivo,
-  grupoSemana
-};

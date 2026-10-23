@@ -1,9 +1,11 @@
-const express = require('express');
-const pool = require('../db');
-const { authenticateToken } = require('../middleware/auth');
-const { requireModuloBoletos, loadUserFlags, assertBoletosAcessoRestaurante } = require('../middleware/permissoes');
-const { intervaloSemana, normalizarTipo } = require('../lib/boletosSemana');
-const {
+import express from 'express';
+import pool from '../db';
+import { authenticateToken } from '../middleware/auth';
+import { requireModuloBoletos, loadUserFlags, assertBoletosAcessoRestaurante } from '../middleware/permissoes';
+import { intervaloSemana, normalizarTipo } from '../lib/boletosSemana';
+import type { IntervaloSemana } from '../lib/boletosSemana';
+import { codigoErro } from '../lib/erros';
+import {
   hojeBrasil,
   dateToIso,
   parseValorBoleto,
@@ -13,7 +15,17 @@ const {
   parseDateOnly,
   BOLETO_SELECT,
   META_SELECT
-} = require('../lib/boletos');
+} from '../lib/boletos';
+import type { BoletoRow, MetaRow } from '../lib/boletos';
+
+interface SemanaResumo {
+  chave: string;
+  inicio: string | null;
+  fim: string | null;
+  total: number;
+  quantidade: number;
+  maximo: number | null;
+}
 
 const router = express.Router();
 
@@ -21,7 +33,7 @@ const router = express.Router();
 
 router.get('/api/boletos/resumo', authenticateToken, requireModuloBoletos, async (req, res) => {
   try {
-    const rid = parseInt(req.query.restaurante_id, 10);
+    const rid = parseInt(String(req.query.restaurante_id), 10);
     if (Number.isNaN(rid)) {
       return res.status(400).json({ error: 'restaurante_id é obrigatório' });
     }
@@ -29,21 +41,21 @@ router.get('/api/boletos/resumo', authenticateToken, requireModuloBoletos, async
     if (!pode) return;
 
     const [boletos, metas] = await Promise.all([
-      pool.query(
+      pool.query<BoletoRow>(
         `SELECT ${BOLETO_SELECT} FROM boletos_notas WHERE restaurante_id = $1 ORDER BY dt_recebimento ASC, id ASC`,
         [rid]
       ),
-      pool.query(
+      pool.query<MetaRow>(
         `SELECT ${META_SELECT} FROM boletos_metas_gasto WHERE restaurante_id = $1 ORDER BY semana_inicio ASC`,
         [rid]
       )
     ]);
 
-    const porSemana = new Map();
+    const porSemana = new Map<string, SemanaResumo>();
     boletos.rows.forEach((row) => {
       const item = enriquecerBoleto(row);
       if (!item.semana_chave) return;
-      const atual = porSemana.get(item.semana_chave) || {
+      const atual: SemanaResumo = porSemana.get(item.semana_chave) || {
         chave: item.semana_chave,
         inicio: item.semana_inicio,
         fim: item.semana_fim,
@@ -58,7 +70,7 @@ router.get('/api/boletos/resumo', authenticateToken, requireModuloBoletos, async
 
     metas.rows.forEach((row) => {
       const meta = enriquecerMeta(row);
-      const atual = porSemana.get(meta.semana_chave) || {
+      const atual: SemanaResumo = porSemana.get(meta.semana_chave) || {
         chave: meta.semana_chave,
         inicio: meta.semana_inicio,
         fim: meta.semana_fim,
@@ -88,13 +100,13 @@ router.get('/api/boletos/resumo', authenticateToken, requireModuloBoletos, async
 
 router.get('/api/boletos', authenticateToken, requireModuloBoletos, async (req, res) => {
   try {
-    const rid = parseInt(req.query.restaurante_id, 10);
+    const rid = parseInt(String(req.query.restaurante_id), 10);
     if (Number.isNaN(rid)) {
       return res.status(400).json({ error: 'restaurante_id é obrigatório' });
     }
     const pode = await assertBoletosAcessoRestaurante(req, res, rid);
     if (!pode) return;
-    const result = await pool.query(
+    const result = await pool.query<BoletoRow>(
       `SELECT ${BOLETO_SELECT} FROM boletos_notas WHERE restaurante_id = $1 ORDER BY dt_recebimento DESC NULLS LAST, id DESC`,
       [rid]
     );
@@ -109,7 +121,7 @@ router.get('/api/boletos', authenticateToken, requireModuloBoletos, async (req, 
 router.post('/api/boletos', authenticateToken, requireModuloBoletos, async (req, res) => {
   try {
     const body = req.body || {};
-    const rid = parseInt(body.restaurante_id, 10);
+    const rid = parseInt(String(body.restaurante_id), 10);
     if (Number.isNaN(rid)) {
       return res.status(400).json({ error: 'restaurante_id é obrigatório' });
     }
@@ -140,11 +152,11 @@ router.post('/api/boletos', authenticateToken, requireModuloBoletos, async (req,
       }
     }
 
-    const result = await pool.query(
+    const result = await pool.query<BoletoRow>(
       `INSERT INTO boletos_notas (restaurante_id, usuario_id, dt_recebimento, dt_vencimento, descricao, valor, tipo)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING ${BOLETO_SELECT}`,
-      [rid, req.user.id, dtRecebimento, dtVencimento, descricao, valor, tipo]
+      [rid, req.user!.id, dtRecebimento, dtVencimento, descricao, valor, tipo]
     );
     res.status(201).json(enriquecerBoleto(result.rows[0]));
   } catch (error) {
@@ -160,7 +172,7 @@ router.put('/api/boletos/:id', authenticateToken, requireModuloBoletos, async (r
     if (Number.isNaN(id)) {
       return res.status(400).json({ error: 'id inválido' });
     }
-    const existing = await pool.query(`SELECT ${BOLETO_SELECT} FROM boletos_notas WHERE id = $1`, [id]);
+    const existing = await pool.query<BoletoRow>(`SELECT ${BOLETO_SELECT} FROM boletos_notas WHERE id = $1`, [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Lançamento não encontrado' });
     }
@@ -199,7 +211,7 @@ router.put('/api/boletos/:id', authenticateToken, requireModuloBoletos, async (r
       return res.status(400).json({ error: 'Data de vencimento é obrigatória para boleto' });
     }
 
-    const result = await pool.query(
+    const result = await pool.query<BoletoRow>(
       `UPDATE boletos_notas
        SET dt_recebimento = $1, dt_vencimento = $2, descricao = $3, valor = $4, tipo = $5, updated_at = CURRENT_TIMESTAMP
        WHERE id = $6
@@ -220,7 +232,7 @@ router.delete('/api/boletos/:id', authenticateToken, requireModuloBoletos, async
     if (Number.isNaN(id)) {
       return res.status(400).json({ error: 'id inválido' });
     }
-    const existing = await pool.query(
+    const existing = await pool.query<{ restaurante_id: number; created_at: Date }>(
       'SELECT restaurante_id, created_at FROM boletos_notas WHERE id = $1',
       [id]
     );
@@ -229,7 +241,7 @@ router.delete('/api/boletos/:id', authenticateToken, requireModuloBoletos, async
     }
     const pode = await assertBoletosAcessoRestaurante(req, res, existing.rows[0].restaurante_id);
     if (!pode) return;
-    const flags = await loadUserFlags(req.user.id);
+    const flags = await loadUserFlags(req.user!.id);
     if (!flags || !flags.is_admin) {
       const criado = new Date(existing.rows[0].created_at).getTime();
       const passouUmDia = !Number.isFinite(criado) || Date.now() - criado > 24 * 60 * 60 * 1000;
@@ -250,13 +262,13 @@ router.delete('/api/boletos/:id', authenticateToken, requireModuloBoletos, async
 
 router.get('/api/boletos/metas', authenticateToken, requireModuloBoletos, async (req, res) => {
   try {
-    const rid = parseInt(req.query.restaurante_id, 10);
+    const rid = parseInt(String(req.query.restaurante_id), 10);
     if (Number.isNaN(rid)) {
       return res.status(400).json({ error: 'restaurante_id é obrigatório' });
     }
     const pode = await assertBoletosAcessoRestaurante(req, res, rid);
     if (!pode) return;
-    const result = await pool.query(
+    const result = await pool.query<MetaRow>(
       `SELECT ${META_SELECT} FROM boletos_metas_gasto WHERE restaurante_id = $1 ORDER BY semana_inicio DESC`,
       [rid]
     );
@@ -271,7 +283,7 @@ router.get('/api/boletos/metas', authenticateToken, requireModuloBoletos, async 
 router.post('/api/boletos/metas', authenticateToken, requireModuloBoletos, async (req, res) => {
   try {
     const body = req.body || {};
-    const rid = parseInt(body.restaurante_id, 10);
+    const rid = parseInt(String(body.restaurante_id), 10);
     if (Number.isNaN(rid)) {
       return res.status(400).json({ error: 'restaurante_id é obrigatório' });
     }
@@ -285,8 +297,8 @@ router.post('/api/boletos/metas', authenticateToken, requireModuloBoletos, async
     if (maximo == null) {
       return res.status(400).json({ error: 'Máximo de gasto inválido' });
     }
-    const semana = intervaloSemana(dataReferencia);
-    const result = await pool.query(
+    const semana = intervaloSemana(dataReferencia) as IntervaloSemana; // dataReferencia ja validada
+    const result = await pool.query<MetaRow>(
       `INSERT INTO boletos_metas_gasto (restaurante_id, data_referencia, semana_chave, semana_inicio, semana_fim, maximo_gasto)
        VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (restaurante_id, semana_chave)
@@ -310,7 +322,7 @@ router.put('/api/boletos/metas/:id', authenticateToken, requireModuloBoletos, as
     if (Number.isNaN(id)) {
       return res.status(400).json({ error: 'id inválido' });
     }
-    const existing = await pool.query(`SELECT ${META_SELECT} FROM boletos_metas_gasto WHERE id = $1`, [id]);
+    const existing = await pool.query<MetaRow>(`SELECT ${META_SELECT} FROM boletos_metas_gasto WHERE id = $1`, [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Meta não encontrada' });
     }
@@ -328,8 +340,8 @@ router.put('/api/boletos/metas/:id', authenticateToken, requireModuloBoletos, as
     if (maximo == null) {
       return res.status(400).json({ error: 'Máximo de gasto inválido' });
     }
-    const semana = intervaloSemana(dataReferencia);
-    const result = await pool.query(
+    const semana = intervaloSemana(dataReferencia) as IntervaloSemana; // dataReferencia ja validada
+    const result = await pool.query<MetaRow>(
       `UPDATE boletos_metas_gasto
        SET data_referencia = $1, semana_chave = $2, semana_inicio = $3, semana_fim = $4, maximo_gasto = $5, updated_at = CURRENT_TIMESTAMP
        WHERE id = $6
@@ -338,7 +350,7 @@ router.put('/api/boletos/metas/:id', authenticateToken, requireModuloBoletos, as
     );
     res.json(enriquecerMeta(result.rows[0]));
   } catch (error) {
-    if (error.code === '23505') {
+    if (codigoErro(error) === '23505') {
       return res.status(409).json({ error: 'Já existe meta para esta semana.' });
     }
     if (erroTabelaBoletos(error, res)) return;
@@ -353,7 +365,7 @@ router.delete('/api/boletos/metas/:id', authenticateToken, requireModuloBoletos,
     if (Number.isNaN(id)) {
       return res.status(400).json({ error: 'id inválido' });
     }
-    const existing = await pool.query('SELECT restaurante_id FROM boletos_metas_gasto WHERE id = $1', [id]);
+    const existing = await pool.query<{ restaurante_id: number }>('SELECT restaurante_id FROM boletos_metas_gasto WHERE id = $1', [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Meta não encontrada' });
     }
@@ -368,4 +380,4 @@ router.delete('/api/boletos/metas/:id', authenticateToken, requireModuloBoletos,
   }
 });
 
-module.exports = router;
+export = router;

@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "server": "nodemon backend/server.js",
+    "server": "npm run dev --prefix backend",
     "client": "cd frontend && npm start",
     "install-all": "npm install && cd frontend && npm install && cd ../e2e && npm install",
     "migrate": "node backend/database/migrate.js",

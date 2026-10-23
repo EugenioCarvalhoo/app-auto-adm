@@ -1,20 +1,20 @@
-# Dockerfile para o backend Node.js
-FROM node:18-alpine
-
-# Definir diretório de trabalho
+# Dockerfile para o backend Node.js (TypeScript compilado em dist/)
+FROM node:18-alpine AS build
 WORKDIR /app
-
-# Copiar arquivos de dependências
 COPY package*.json ./
-
-# Instalar dependências
-RUN npm install --production
-
-# Copiar código do backend
+# Precisa das devDependencies (typescript, @types/*) para compilar
+RUN npm ci
 COPY . .
+RUN npm run build
 
-# Expor porta
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
+# Código compilado + scripts/migrations (JS puro, usados por npm run migrate / create-admin)
+COPY --from=build /app/dist ./dist
+COPY database ./database
+
 EXPOSE 5000
 
-# Comando para iniciar o servidor
-CMD ["node", "server.js"]
+CMD ["node", "dist/server.js"]

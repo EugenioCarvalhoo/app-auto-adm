@@ -3,9 +3,9 @@
 Sistema web para restaurantes. Escopo ativo: **(1) cadastro de boletos/notas com dashboard semanal e metas**, **(2) autenticação/autorização de usuários com separação por restaurante**. Todo o resto é legado em processo de remoção (ver `docs/PLANO-DE-ACAO.md`).
 
 ## Stack
-- **Backend:** Node + Express 4, PostgreSQL (`pg`, SQL direto, sem ORM), JWT (`jsonwebtoken`), `bcryptjs`. `backend/server.js` só monta o app; o resto fica em `routes/`, `middleware/`, `lib/` e `db.js`.
+- **Backend:** Node + Express 4 em **TypeScript** (compilado com `tsc` para `backend/dist/`), PostgreSQL (`pg`, SQL direto, sem ORM), JWT (`jsonwebtoken`), `bcryptjs`. `backend/server.ts` só monta o app; o resto fica em `routes/`, `middleware/`, `lib/` e `db.ts`. `typescript` fica fixado em `~5.9` (7.x quebra `moduleResolution: node`); não suba sem ajustar o `tsconfig.json`. `database/` (migrate, create_admin) e `scripts/` continuam JS.
 - **Frontend:** React 18 (Create React App), mistura de `.js` e `.tsx`, `axios`. Navegação por estado (`telaAtual` em `frontend/src/App.js`), sem router.
-- **Deploy:** Easypanel (Dockerfile em `backend/` e `frontend/`). Front e API em hosts diferentes (ver `frontend/src/config.js`).
+- **Deploy:** Easypanel (Dockerfile em `backend/` — multi-stage com `tsc` — e `frontend/`). Comando de início da API: `npm run start:prod` (migrations + `node dist/server.js`); sem migration automática: `npm start` (`node dist/server.js`). Front e API em hosts diferentes (ver `frontend/src/config.js`).
 
 ## Comandos
 ```bash
@@ -13,6 +13,9 @@ npm run install-all          # raiz + frontend + e2e (backend usa o package.json
 npm run dev                  # back (nodemon) + front juntos
 npm run migrate              # aplica backend/database/migrations
 npm run create-admin         # cria usuário admin
+cd backend && npm run typecheck && npm run build   # tsc --noEmit / compila para dist/
+cd backend && npm start      # node dist/server.js (precisa do build)
+cd backend && npm run start:prod   # migrate + node dist/server.js (usado no Easypanel)
 cd backend && npm test       # sobe o Postgres de teste (Docker) se preciso e roda Jest + Supertest (ver backend/test/README.md)
 cd frontend && CI=true npm test
 cd e2e && npm test          # Playwright (Chromium) com Postgres real; ver e2e/README.md
@@ -20,11 +23,11 @@ cd e2e && npm test          # Playwright (Chromium) com Postgres real; ver e2e/R
 Back em `:5000`, front em `:3000`. Variáveis em `backend/.env` (modelo: `backend/.env.example`). `JWT_SECRET` é obrigatório em produção.
 
 ## Arquivos do escopo ativo
-- `backend/server.js` — monta o Express (CORS, log, routers). Rotas em `backend/routes/`: `auth.js` (`loginHandler`, `/api/verify`), `restaurantes.js`, `boletos.js` (`/api/boletos*`, metas), `admin.js` (`/api/admin/usuarios-permissoes*`), `health.js`.
-- `backend/db.js` — pool do Postgres.
-- `backend/middleware/auth.js` — `authenticateToken` (valida JWT). `backend/middleware/permissoes.js` — `loadUserFlags`, `requireAdmin`, `requireModuloBoletos`, `assertBoletosAcessoRestaurante`, `usuarioRestaurantesRestritos`.
-- `backend/lib/boletos.js` — helpers de boleto (valor, datas, enriquecimento).
-- `backend/lib/boletosSemana.js` — semana sábado–sexta, vencimento efetivo, tipo (testado em `backend/test/boletosSemana.test.js`).
+- `backend/server.ts` — monta o Express (CORS, log, routers). Rotas em `backend/routes/`: `auth.ts` (`loginHandler`, `/api/verify`), `restaurantes.ts`, `boletos.ts` (`/api/boletos*`, metas), `admin.ts` (`/api/admin/usuarios-permissoes*`), `health.ts`. Tipos/erros/env em `lib/tipos.ts`, `lib/erros.ts`, `lib/loadEnv.ts`.
+- `backend/db.ts` — pool do Postgres.
+- `backend/middleware/auth.ts` — `authenticateToken` (valida JWT). `backend/middleware/permissoes.ts` — `loadUserFlags`, `requireAdmin`, `requireModuloBoletos`, `assertBoletosAcessoRestaurante`, `usuarioRestaurantesRestritos`.
+- `backend/lib/boletos.ts` — helpers de boleto (valor, datas, enriquecimento).
+- `backend/lib/boletosSemana.ts` — semana sábado–sexta, vencimento efetivo, tipo (testado em `backend/test/boletosSemana.test.js`).
 - `backend/database/migrations/` — `002` usuarios, `003_create_restaurantes`, `007` vínculo usuário↔restaurante, `013` flags de módulo, `014` boletos, `015` vínculos da regra nova, `016` rename do vínculo, `017` remove gastos/estoque e flags legadas.
 - `frontend/src/components/boletos/BoletosModulo.tsx|css` — tela de boletos, resumo semanal, metas.
 - `frontend/src/lib/boletosSemana.ts`, `frontend/src/lib/userPermissoes.js`.
@@ -38,7 +41,7 @@ Back em `:5000`, front em `:3000`. Variáveis em `backend/.env` (modelo: `backen
 ## Modelo de autorização (importante)
 - `usuarios`: `is_admin` + flag `modulo_boletos` (as legadas `modulo_financeiro`, `modulo_estoque*`, `somente_estoque` foram removidas na migration 017).
 - Admin acessa tudo. Demais usuários dependem de `modulo_boletos`.
-- Separação por restaurante: tabela **`usuario_restaurantes`** (renomeada da `usuario_restaurante_estoque` na migration 016; vincula usuário↔restaurante). Checada por `assertBoletosAcessoRestaurante` e `usuarioRestaurantesRestritos` em `middleware/permissoes.js`.
+- Separação por restaurante: tabela **`usuario_restaurantes`** (renomeada da `usuario_restaurante_estoque` na migration 016; vincula usuário↔restaurante). Checada por `assertBoletosAcessoRestaurante` e `usuarioRestaurantesRestritos` em `middleware/permissoes.ts`.
 - **Flags são lidas do banco a cada requisição** (`loadUserFlags`), não confie só no JWT.
 - Toda rota que recebe `:id` de boleto/meta deve buscar o registro e validar o `restaurante_id` dele (padrão já usado em PUT/DELETE de boletos). Mantenha esse padrão em rotas novas.
 
@@ -48,13 +51,13 @@ Back em `:5000`, front em `:3000`. Variáveis em `backend/.env` (modelo: `backen
 - Datas de boleto são `DATE` sem fuso; use `hojeBrasil()` (America/Sao_Paulo) para "hoje".
 - Não escreva migrations destrutivas (`DROP`) sem confirmar com o usuário (a 017 foi confirmada pelo dono em 21/10/2026). Faça backup antes de aplicá-las.
 - Sempre filtrar queries por `restaurante_id` e validar acesso com `assertBoletosAcessoRestaurante`.
-- Antes de mexer em auth, rode `cd backend && npm test`. O script sobe sozinho o Postgres de teste (container `pg-controle`, porta 5433); os testes só rodam em banco terminado em `_test`.
+- Antes de mexer em auth, rode `cd backend && npm test`. O CI roda `typecheck` e `build` antes do Jest. O script sobe sozinho o Postgres de teste (container `pg-controle`, porta 5433); os testes só rodam em banco terminado em `_test`.
 - Mudanças em contrato de API: atualizar back e `BoletosModulo.tsx` na mesma tarefa.
 
 ## Agentes por camada (`.claude/agents/`)
 | Agente | Responsabilidade | Edita |
 |---|---|---|
-| `backend-api` | rotas, middlewares, regra de acesso | `backend/{routes,middleware,lib,db.js,server.js}` |
+| `backend-api` | rotas, middlewares, regra de acesso | `backend/{routes,middleware,lib,db.ts,server.ts}` |
 | `database-migrations` | schema, migrations (DROP só com confirmação) | `backend/database/` |
 | `frontend-ui` | telas, componentes, axios | `frontend/src` |
 | `qa-tests` | **todos os testes**: unitários e de integração do back (Jest), front, Playwright; reporta bugs sem corrigir produção | `backend/test`, `e2e/`, `*.test.js` |

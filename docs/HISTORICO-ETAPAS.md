@@ -25,7 +25,7 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
 - `CLAUDE.md` na raiz (stack, comandos, escopo ativo, regra de acesso, regras para o Claude).
 - `docs/PLANO-DE-ACAO.md`: diagnóstico do que manter/descartar e fases 0 a 7.
 
-### Regra de acesso (backend — `backend/server.js`)
+### Regra de acesso (backend — originalmente em `server.js`, hoje `middleware/permissoes.ts`)
 - `usuarioRestaurantesRestritos(flags)` agora é `!flags.is_admin` (todo não-admin é restrito aos vínculos).
 - `assertBoletosAcessoRestaurante` e `assertEstoqueAcessoRestaurante`: só `is_admin` ignora o vínculo; antes `modulo_financeiro` também ignorava.
 - `POST/PUT/DELETE /api/restaurantes` passaram de `requireFinanceiroAccess` para `requireAdmin`.
@@ -60,7 +60,7 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
 - Criado `.github/workflows/ci-deploy.yml` (GitHub Actions): `backend` (Jest com Postgres 15 de serviço), `frontend` (testes, `tsc`, build), `docker` (build das duas imagens) e, só se tudo passar, deploy por webhook do Easypanel: branch `homologacao` -> hml; branch `main` -> produção (ambiente `producao` com aprovação manual).
 - Validado só localmente (YAML, Jest, build, `npm ci --dry-run`); **ainda não rodou no GitHub**.
 - O build do front no CI usa `CI=true` (lint rigoroso) desde a Fase 2.
-- Pendente do usuário: criar branch `homologacao`; criar secrets `EASYPANEL_HML_API_WEBHOOK`, `EASYPANEL_HML_WEB_WEBHOOK`, `EASYPANEL_PROD_API_WEBHOOK`, `EASYPANEL_PROD_WEB_WEBHOOK`; criar ambientes `homologacao` e `producao` (reviewers na produção); desligar o deploy automático por push no Easypanel. A migration continua manual (`npm run migrate` no terminal do back) ou via Comando de Início `node database/migrate.js && node server.js`.
+- Pendente do usuário: criar branch `homologacao`; criar secrets `EASYPANEL_HML_API_WEBHOOK`, `EASYPANEL_HML_WEB_WEBHOOK`, `EASYPANEL_PROD_API_WEBHOOK`, `EASYPANEL_PROD_WEB_WEBHOOK`; criar ambientes `homologacao` e `producao` (reviewers na produção); desligar o deploy automático por push no Easypanel. A migration continua manual (`npm run migrate` no terminal do back) ou via Comando de Início `node database/migrate.js && node dist/server.js`.
 
 ### Testes E2E com Playwright (21/10/2026)
 - Pasta `e2e/` (projeto próprio): 39 testes em 6 suítes (login/sessão, acesso por perfil, boletos, metas, administração, isolamento direto na API). Detalhes em `e2e/README.md`.
@@ -96,7 +96,7 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
 - **Commits feitos na branch `feat/regra-acesso-admin`** (6 commits: regra de acesso, migration 015, correções de validação, testes, CI e docs), ainda **sem push** e sem merge na `main`. Ficaram de fora, de propósito: a alteração do usuário em `frontend/package.json` (script `start` sem `cross-env`) e a pasta `.vscode/` vazia.
 - `frontend/package.json` tem alteração sua não commitada: o script `start` perdeu o `cross-env HOST=0.0.0.0`. No WSL/Linux, `start:unix` ou `HOST=0.0.0.0 react-scripts start` resolve; decida qual manter.
 - **Deploy do código novo em homologação ainda não confirmado.** A migration já está no banco; a regra só vale com o back e o front novos publicados. (O teste manual com o `Test` funcionou; confirme que foi com o código novo.)
-- O `Dockerfile` do back só roda `node server.js`: a migration não roda sozinha no deploy. Executar `npm run migrate` manualmente nos ambientes (produção ainda não foi migrada).
+- O `Dockerfile` do back só roda `node dist/server.js`: a migration não roda sozinha no deploy. Executar `npm run migrate` manualmente nos ambientes (produção ainda não foi migrada).
 - Não testado em homologação: o lado negativo (usuário não ver restaurante não liberado). Está coberto só pelos testes automatizados.
 - Não executei `npm run build` do frontend.
 
@@ -115,3 +115,12 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
 - **Conexão com a homologação:** as variáveis (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`) estavam no `C:\IT\prd\ws\controle-financeiro.code-workspace` (setting `terminal.integrated.env.windows`), fora do repositório. No WSL elas **não** são herdadas: exporte-as no shell ou crie `backend/.env` a partir de `backend/.env.example` (já ignorado pelo git). Nunca commite senhas.
 - Migrar: `cd backend && npm run migrate` (com as variáveis exportadas). Antes, confirme que `DB_NAME` é o de homologação.
 - Observação: o Claude Code no WSL tem um diretório de memória e de projeto diferente do Windows. Este arquivo e o `CLAUDE.md` são a fonte de contexto que acompanha o repositório.
+
+## 7. Migração do backend para TypeScript (21/10/2026)
+- `server`, `db`, `routes/*`, `middleware/*`, `lib/*` agora são `.ts`; novos: `lib/tipos.ts`, `lib/erros.ts`, `lib/loadEnv.ts` e `backend/tsconfig.json` (`strict`, CommonJS, saída em `dist/`). `database/` e `scripts/` seguem em JS. Jest usa `ts-jest`.
+- Scripts do back: `dev` (nodemon + tsx), `build` (`tsc`), `typecheck` (`tsc --noEmit`), `start` (`node dist/server.js`), `start:prod` (`node database/migrate.js && node dist/server.js`).
+- `typescript` fixado em `~5.9`: a 7.x quebra `moduleResolution: node`.
+- `backend/Dockerfile` em dois estágios (build com `npm ci` + `tsc`; runtime com `npm ci --omit=dev`, `dist/` e `database/`). Adicionado `backend/.dockerignore` (evita copiar `node_modules`/`.env` do host).
+- CI: o job `backend` roda `npm run typecheck` e `npm run build` antes do Jest.
+- **Easypanel:** o Comando de Início da API deve ser `npm run start:prod` (migrations + `node dist/server.js`) ou, sem migration automática, `npm start`; `node server.js` não existe mais. Atualizar antes do primeiro deploy após o merge.
+- `docker build ./backend` testado (Docker no WSL, distro `Ubuntu`) em 22/10/2026: build concluído, incluindo `npm ci` e `tsc`. O container não foi executado (`node dist/server.js` não foi testado).

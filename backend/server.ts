@@ -1,15 +1,16 @@
-const express = require('express');
-const cors = require('cors');
-const dotenv = require('dotenv');
-const path = require('path');
-
-// Carregar .env do diretório backend ANTES de importar os módulos que leem process.env
-dotenv.config({ path: path.join(__dirname, '.env') });
-
-const pool = require('./db');
+// Carregar .env do diretório backend ANTES de importar os módulos que leem process.env (db.ts)
+import './lib/loadEnv';
+import express from 'express';
+import cors from 'cors';
+import pool from './db';
+import authRouter from './routes/auth';
+import restaurantesRouter from './routes/restaurantes';
+import boletosRouter from './routes/boletos';
+import adminRouter from './routes/admin';
+import healthRouter from './routes/health';
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT) || 5000;
 
 // Aumentar limite de headers para evitar erro 431
 app.use((req, res, next) => {
@@ -42,16 +43,16 @@ if (
 }
 
 // Cada router declara o caminho completo (/api/...), então todos montam na raiz.
-app.use(require('./routes/auth'));
-app.use(require('./routes/restaurantes'));
-app.use(require('./routes/boletos'));
-app.use(require('./routes/admin'));
-app.use(require('./routes/health'));
+app.use(authRouter);
+app.use(restaurantesRouter);
+app.use(boletosRouter);
+app.use(adminRouter);
+app.use(healthRouter);
 
 // Expõe o pool para os testes de integração encerrarem as conexões.
 app.locals.pool = pool;
 
-module.exports = app;
+export = app;
 
 // Só escuta porta quando o arquivo é executado diretamente (npm start / node server.js)
 if (require.main === module) {

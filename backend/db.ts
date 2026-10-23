@@ -1,4 +1,4 @@
-const { Pool } = require('pg');
+import { Pool } from 'pg';
 
 // Carregue o .env (dotenv) antes de requerer este módulo.
 const pool = new Pool({
@@ -6,7 +6,7 @@ const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   database: process.env.DB_NAME || 'controle_financeiro',
   password: process.env.DB_PASSWORD || 'postgres',
-  port: parseInt(process.env.DB_PORT, 10) || 5432,
+  port: parseInt(process.env.DB_PORT ?? '', 10) || 5432,
 });
 
 // Log de debug e ping inicial (evita ruído e conexão real em testes automatizados)
@@ -26,4 +26,4 @@ if (process.env.NODE_ENV !== 'test') {
   });
 }
 
-module.exports = pool;
+export = pool;
