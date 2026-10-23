@@ -26,6 +26,9 @@ Back em `:5000`, front em `:3000`. Variáveis em `backend/.env` (modelo: `backen
 ## Arquivos do escopo ativo
 - `backend/server.ts` — monta o Express (CORS, log, routers). Rotas em `backend/routes/`: `auth.ts` (`loginHandler`, `/api/verify`), `restaurantes.ts`, `boletos.ts` (`/api/boletos*`, metas), `admin.ts` (`/api/admin/usuarios-permissoes*`), `health.ts`. Tipos/erros/env em `lib/tipos.ts`, `lib/erros.ts`, `lib/loadEnv.ts`.
 - `backend/db.ts` — pool do Postgres.
+- `backend/database/lista-migrations.js` — lista única e ordenada das migrations (`{ MIGRATIONS }`), usada por `migrate.js` e pela API. **Toda migration nova DEVE ser adicionada aí**, senão `migrate.js` não a aplica (há teste que cobre).
+- `backend/lib/migracoes.ts` — `migracoesPendentes(pool)`: compara a lista com `schema_migrations`. Usada por `GET /api/health/ready` (200 `migrations:'ok'`; 503 com `migrations:'pending'` e `pendentes`) e pelo boot, que loga erro destacado se faltar migration, sem encerrar o processo nem aplicá-las. `GET /api/health` continua liveness (sem banco).
+- Tabela inexistente (Postgres `42P01`) em admin, restaurantes, auth/verify e boletos responde 503 `Banco desatualizado: migrations pendentes. Veja /api/health/ready.`
 - `backend/middleware/auth.ts` — `authenticateToken` (valida JWT). `backend/middleware/permissoes.ts` — `loadUserFlags`, `requireAdmin`, `requireModuloBoletos`, `assertBoletosAcessoRestaurante`, `usuarioRestaurantesRestritos`.
 - `backend/lib/boletos.ts` — helpers de boleto (valor, datas, enriquecimento).
 - `backend/lib/boletosSemana.ts` — semana sábado–sexta, vencimento efetivo, tipo (testado em `backend/test/boletosSemana.test.js`).
