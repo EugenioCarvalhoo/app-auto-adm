@@ -2,14 +2,20 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import './Login.css';
 import { API_URL } from '../config';
+import { mensagemErro } from '../lib/erros';
+import type { LoginResposta, Usuario } from '../types';
 
-const Login = ({ onLogin }) => {
+interface Props {
+  onLogin: (user: Usuario, token: string) => void;
+}
+
+const Login: React.FC<Props> = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -18,7 +24,7 @@ const Login = ({ onLogin }) => {
     const loginUrl = `${API_URL}/login`;
 
     try {
-      const response = await axios.post(loginUrl, body);
+      const response = await axios.post<LoginResposta>(loginUrl, body);
 
       // Salvar token no localStorage
       localStorage.setItem('token', response.data.token);
@@ -27,7 +33,7 @@ const Login = ({ onLogin }) => {
       // Notificar componente pai
       onLogin(response.data.user, response.data.token);
     } catch (err) {
-      if (err.response?.status === 405) {
+      if (axios.isAxiosError(err) && err.response?.status === 405) {
         const apiHealth = `${API_URL}/health`;
         const rootHealth = String(API_URL).replace(/\/api$/i, '') + '/health';
         setError(
@@ -36,7 +42,7 @@ const Login = ({ onLogin }) => {
             `Se a base estiver certa, no Easypanel encaminhe POST /api/* ao Node :5000. Teste JSON: ${apiHealth} e ${rootHealth}.`
         );
       } else {
-        setError(err.response?.data?.error || 'Erro ao fazer login. Verifique suas credenciais.');
+        setError(mensagemErro(err, 'Erro ao fazer login. Verifique suas credenciais.'));
       }
     } finally {
       setLoading(false);

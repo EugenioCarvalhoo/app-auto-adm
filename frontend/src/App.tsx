@@ -8,6 +8,7 @@ import AdminPermissoesUsuarios from './components/AdminPermissoesUsuarios';
 import BoletosModulo from './components/boletos/BoletosModulo';
 import { permissoesUsuario, telaInicialUsuario, usuarioTemAlgumModulo } from './lib/userPermissoes';
 import { API_URL } from './config';
+import type { Restaurante, Tela, Usuario, VerifyResposta } from './types';
 
 const CORES_RESTAURANTE = [
   '#0f766e',
@@ -24,9 +25,9 @@ const CORES_RESTAURANTE = [
   '#9f1239'
 ];
 
-function corRestaurante(id) {
+function corRestaurante(id: number): string {
   const indice = Math.abs(Number(id) || 0) % CORES_RESTAURANTE.length;
-  return CORES_RESTAURANTE[indice];
+  return CORES_RESTAURANTE[indice] ?? '#0f766e';
 }
 
 // Configurar axios para incluir token em todas as requisições
@@ -46,9 +47,13 @@ axios.interceptors.request.use(
 // Interceptor para tratar erros de autenticação
 axios.interceptors.response.use(
   (response) => response,
-  (error) => {
+  (error: unknown) => {
     // 401 no próprio login é senha errada: a tela de login mostra o erro, sem recarregar
-    if (error.response?.status === 401 && !String(error.config?.url || '').endsWith('/login')) {
+    if (
+      axios.isAxiosError(error) &&
+      error.response?.status === 401 &&
+      !String(error.config?.url || '').endsWith('/login')
+    ) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.reload();
@@ -58,19 +63,19 @@ axios.interceptors.response.use(
 );
 
 function App() {
-  const [restaurantes, setRestaurantes] = useState([]);
-  const [restauranteSelecionado, setRestauranteSelecionado] = useState(null);
+  const [restaurantes, setRestaurantes] = useState<Restaurante[]>([]);
+  const [restauranteSelecionado, setRestauranteSelecionado] = useState<number | null>(null);
   const [restauranteConfirmado, setRestauranteConfirmado] = useState(false);
-  const [restaurantePendente, setRestaurantePendente] = useState(null);
+  const [restaurantePendente, setRestaurantePendente] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<Usuario | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
-  const [telaAtual, setTelaAtual] = useState(() => {
+  const [telaAtual, setTelaAtual] = useState<Tela>(() => {
     try {
-      const u = JSON.parse(localStorage.getItem('user') || '{}');
-      return telaInicialUsuario(u);
+      const u = JSON.parse(localStorage.getItem('user') || '{}') as Partial<Usuario>;
+      return telaInicialUsuario({ is_admin: !!u.is_admin });
     } catch {
       return 'boletos';
     }
@@ -96,8 +101,9 @@ function App() {
     if (!isAuthenticated || restaurantes.length === 0 || !user) return;
     const perguntar = !!user.is_admin || restaurantes.length > 1;
     if (perguntar && !restauranteConfirmado) return;
-    if (!restauranteSelecionado) {
-      setRestauranteSelecionado(restaurantes[0].id);
+    const primeiro = restaurantes[0];
+    if (!restauranteSelecionado && primeiro) {
+      setRestauranteSelecionado(primeiro.id);
       setRestauranteConfirmado(true);
     }
   }, [isAuthenticated, restauranteSelecionado, restaurantes, user, restauranteConfirmado]);
@@ -122,12 +128,12 @@ function App() {
     }
 
     try {
-      const response = await axios.get(`${API_URL}/verify`);
+      const response = await axios.get<VerifyResposta>(`${API_URL}/verify`);
       const u = response.data.user;
       setUser(u);
       localStorage.setItem('user', JSON.stringify(u));
       setIsAuthenticated(true);
-    } catch (err) {
+    } catch {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
     } finally {
@@ -135,7 +141,7 @@ function App() {
     }
   };
 
-  const handleLogin = (userData, token) => {
+  const handleLogin = (userData: Usuario) => {
     setUser(userData);
     setIsAuthenticated(true);
     setTelaAtual(telaInicialUsuario(userData));
@@ -153,7 +159,7 @@ function App() {
 
   const carregarRestaurantes = async () => {
     try {
-      const response = await axios.get(`${API_URL}/restaurantes`);
+      const response = await axios.get<Restaurante[]>(`${API_URL}/restaurantes`);
       setRestaurantes(response.data);
       setError(null);
     } catch (err) {
@@ -195,8 +201,8 @@ function App() {
     setRestauranteConfirmado(true);
   };
 
-  const handleRestauranteChange = (e) => {
-    const novoRestauranteId = parseInt(e.target.value);
+  const handleRestauranteChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const novoRestauranteId = parseInt(e.target.value, 10);
     setRestauranteSelecionado(novoRestauranteId);
   };
 
@@ -359,7 +365,7 @@ function App() {
             />
           )
         ) : telaAtual === 'permissoes' && isAdmin ? (
-          <AdminPermissoesUsuarios onError={(msg) => setError(msg)} />
+          <AdminPermissoesUsuarios onError={(msg: string | null) => setError(msg)} />
         ) : telaAtual === 'restaurantes' && isAdmin ? (
           <CadastroRestaurantes onUpdate={handleRestaurantesUpdated} />
         ) : (

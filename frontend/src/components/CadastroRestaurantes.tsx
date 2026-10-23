@@ -1,21 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_URL } from '../config';
+import { mensagemErro } from '../lib/erros';
+import type { Restaurante, RestauranteForm } from '../types';
 import './CadastroRestaurantes.css';
 
-const CadastroRestaurantes = ({ onUpdate }) => {
-  const [restaurantes, setRestaurantes] = useState([]);
+interface Props {
+  onUpdate?: () => void | Promise<void>;
+}
+
+const FORM_VAZIO: RestauranteForm = {
+  nome: '',
+  endereco: '',
+  telefone: '',
+  email: '',
+  cnpj: '',
+  observacoes: ''
+};
+
+const CadastroRestaurantes: React.FC<Props> = ({ onUpdate }) => {
+  const [restaurantes, setRestaurantes] = useState<Restaurante[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [editando, setEditando] = useState(null);
-  const [formData, setFormData] = useState({
-    nome: '',
-    endereco: '',
-    telefone: '',
-    email: '',
-    cnpj: '',
-    observacoes: ''
-  });
+  const [error, setError] = useState<string | null>(null);
+  const [editando, setEditando] = useState<Restaurante | null>(null);
+  const [formData, setFormData] = useState<RestauranteForm>(FORM_VAZIO);
 
   useEffect(() => {
     carregarRestaurantes();
@@ -24,7 +32,7 @@ const CadastroRestaurantes = ({ onUpdate }) => {
   const carregarRestaurantes = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_URL}/restaurantes`);
+      const response = await axios.get<Restaurante[]>(`${API_URL}/restaurantes`);
       setRestaurantes(response.data);
       setError(null);
     } catch (err) {
@@ -35,7 +43,7 @@ const CadastroRestaurantes = ({ onUpdate }) => {
     }
   };
 
-  const handleInputChange = (e) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -44,18 +52,11 @@ const CadastroRestaurantes = ({ onUpdate }) => {
   };
 
   const limparFormulario = () => {
-    setFormData({
-      nome: '',
-      endereco: '',
-      telefone: '',
-      email: '',
-      cnpj: '',
-      observacoes: ''
-    });
+    setFormData(FORM_VAZIO);
     setEditando(null);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.nome || formData.nome.trim() === '') {
@@ -79,11 +80,11 @@ const CadastroRestaurantes = ({ onUpdate }) => {
       }
     } catch (err) {
       console.error('Erro ao salvar restaurante:', err);
-      setError(err.response?.data?.error || 'Erro ao salvar restaurante');
+      setError(mensagemErro(err, 'Erro ao salvar restaurante'));
     }
   };
 
-  const handleEditar = (restaurante) => {
+  const handleEditar = (restaurante: Restaurante) => {
     setEditando(restaurante);
     setFormData({
       nome: restaurante.nome || '',
@@ -96,7 +97,7 @@ const CadastroRestaurantes = ({ onUpdate }) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleDeletar = async (id) => {
+  const handleDeletar = async (id: number) => {
     if (!window.confirm('Tem certeza que deseja desativar este restaurante?')) {
       return;
     }
@@ -109,7 +110,7 @@ const CadastroRestaurantes = ({ onUpdate }) => {
       }
     } catch (err) {
       console.error('Erro ao deletar restaurante:', err);
-      setError(err.response?.data?.error || 'Erro ao deletar restaurante');
+      setError(mensagemErro(err, 'Erro ao deletar restaurante'));
     }
   };
 
@@ -207,7 +208,7 @@ const CadastroRestaurantes = ({ onUpdate }) => {
             value={formData.observacoes}
             onChange={handleInputChange}
             placeholder="Observações adicionais"
-            rows="3"
+            rows={3}
           />
         </div>
 
