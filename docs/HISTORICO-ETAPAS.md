@@ -148,7 +148,7 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
 - **Easypanel:** o Comando de Início da API deve ser `npm run start:prod` (migrations + `node dist/server.js`) ou, sem migration automática, `npm start`; `node server.js` não existe mais. Atualizar antes do primeiro deploy após o merge.
 - `docker build ./backend` testado (Docker no WSL, distro `Ubuntu`) em 22/10/2026: build concluído, incluindo `npm ci` e `tsc`. O container não foi executado (`node dist/server.js` não foi testado).
 
-## 9. Migração do frontend para TypeScript estrito (23/10/2026)
+## 10. Migração do frontend para TypeScript estrito (23/10/2026)
 - Branch `feat/frontend-typescript-estrito` (sem commit ainda). O front deixa de misturar `.js` e `.tsx`: tudo em `.ts`/`.tsx`.
 - Renomeados: `App.js`->`App.tsx`, `config.js`->`config.ts`, `Login.js`->`Login.tsx`, `CadastroRestaurantes.js`->`CadastroRestaurantes.tsx`, `lib/userPermissoes.js`->`.ts`, `setupTests.js`->`.ts`, `Login.test.js`->`.tsx`, `userPermissoes.test.js`->`.ts`. `AdminPermissoesUsuarios.tsx` e `BoletosModulo.tsx` ajustados.
 - Novos: `frontend/src/types.ts` (tipos compartilhados da API) e `frontend/src/lib/erros.ts` (`mensagemErro(error: unknown, fallback)`).
