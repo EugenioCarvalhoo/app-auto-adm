@@ -51,4 +51,4 @@ No frontend, `npm start` usa `cross-env`; se não for reconhecido, rode `npm ins
 - **`cross-env` não reconhecido:** falta `npm install` em `frontend/`.
 - **Erro de conexão com o banco:** confira se o PostgreSQL está no ar e as credenciais em `backend/.env`.
 - **Migrations falham:** o banco precisa existir e o usuário precisa de permissão para criar tabelas.
-- **Porta em uso:** mude `PORT` em `backend/.env` (e a URL da API no front, em `frontend/src/config.js` ou `REACT_APP_API_URL`).
+- **Porta em uso:** mude `PORT` em `backend/.env` (e a URL da API no front, em `frontend/src/config.ts` ou `REACT_APP_API_URL`).
