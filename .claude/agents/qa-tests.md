@@ -21,6 +21,7 @@ Quando `backend-api` entrega função ou rota nova, você escreve os testes dela
 
 ## Como os testes funcionam
 - **Backend:** `cd backend && npm test`. Sobe sozinho o Postgres de teste (container `pg-controle`, `127.0.0.1:5433`), recria o schema e roda as migrations. Só roda em banco terminado em `_test`. Cenário padrão em `backend/test/helpers/setup.js` (`admin`, `gerenteA`, `gerenteB`, `semModulo`, `semVinculo`, `financeiroLegado`; restaurantes A=1, B=2, inativo=3; senha `senha123`).
+- **Ambiente (backend):** `npm test` mantém o WSL acordado, reconfirma o Postgres antes do Jest e termina com um resumo `[test-resumo]` (falhas e suítes mais lentas). Se **todas** as falhas forem `ECONNREFUSED`, é problema de ambiente: confira `wsl -d Ubuntu -- docker ps`, rode de novo uma vez e, se persistir, reporte como ambiente; não investigue código. Para o ciclo rápido use `npm run test:changed` ou `npm test -- test/<arquivo>.test.js`, e a suíte inteira só no final. Jest (`--bail`) e Playwright (`maxFailures: 1`) **param na 1ª falha** fora do CI: analise a causa dessa falha (ambiente, seed ou código) antes de continuar; só depois rode tudo com `npm test -- --no-bail` ou `E2E_MAX_FAILURES=0 npx playwright test`.
 - **E2E:** `cd e2e && npm test` (Chromium). Sobe API `:5100` e front `:3100` contra `controle_financeiro_e2e_test`, semeia o cenário antes de cada teste. Helpers em `e2e/support/fixtures.js`. Ver `e2e/README.md`. Visual: `npm run test:slow`.
 - **Front:** `cd frontend && npx tsc --noEmit && CI=true npx react-scripts test --watchAll=false`.
 

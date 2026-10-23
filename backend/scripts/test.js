@@ -6,7 +6,10 @@
  *  2. Se não conectar e o host for local, sobe o container Docker (cria, ou inicia se já existe).
  *     No Windows usa o Docker de dentro do WSL (`wsl -d <distro> -- docker ...`).
  *  3. Cria o banco `*_test` se ainda não existir.
- *  4. Roda o Jest repassando os argumentos (ex.: `npm test -- test/boletos.test.js`).
+ *  4. No Windows, mantém a distro WSL acordada enquanto o Jest roda (sem isso o WSL se desliga ao ficar
+ *     ocioso e derruba o container no meio da suíte, causando ECONNREFUSED em massa).
+ *  5. Reconfirma a conexão logo antes do Jest e roda o Jest repassando os argumentos
+ *     (ex.: `npm test -- test/boletos.test.js`). Ao final, imprime um resumo curto (suítes lentas e com falha).
  *
  * Variáveis opcionais:
  *   TEST_DB_HOST/PORT/NAME/USER/PASSWORD  conexão (padrão: 127.0.0.1:5433/controle_financeiro_test, postgres/postgres)
@@ -16,8 +19,11 @@
  *   WSL_DISTRO          distro WSL2 com Docker (padrão: Ubuntu)
  *   TEST_DB_AUTOSTART=0 não mexe no Docker; só testa a conexão
  */
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { manterWslAcordado } = require('./wslKeepalive');
 const { Pool } = require('pg');
 const { dbConfig } = require('../test/helpers/dbConfig');
 
@@ -47,6 +53,38 @@ function docker(args) {
     falhar(`não consegui executar ${onde}: ${r.error.message}`);
   }
   return r;
+}
+
+/** Resumo curto do relatório JSON do Jest: totais, suítes com falha e as mais lentas. */
+function imprimirResumo(arquivo) {
+  let r;
+  try {
+    r = JSON.parse(fs.readFileSync(arquivo, 'utf8'));
+  } catch {
+    return;
+  } finally {
+    fs.rmSync(arquivo, { force: true });
+  }
+  const nome = (suite) => path.relative(BACKEND_DIR, suite.name).split(path.sep).join('/');
+  const duracao = (suite) => (suite.endTime - suite.startTime) / 1000;
+  const suites = r.testResults || [];
+  const falhas = suites.filter((x) => x.status === 'failed');
+  console.log('\n[test-resumo] ' + `${r.numPassedTests} ok, ${r.numFailedTests} falhas, ${r.numTotalTests} testes em ${suites.length} suítes`);
+  if (falhas.length) {
+    console.log('[test-resumo] suítes com falha:');
+    for (const x of falhas) {
+      const primeira = (x.assertionResults || []).find((a) => a.status === 'failed');
+      const msg = (primeira?.failureMessages?.[0] || x.message || '').split('\n').find((l) => l.trim()) || '';
+      console.log(`  - ${nome(x)} (${(x.assertionResults || []).filter((a) => a.status === 'failed').length} falhas): ${msg.trim().slice(0, 140)}`);
+    }
+    if (falhas.length > 1 && (r.numFailedTests > 0) && falhas.every((x) => /ECONNREFUSED|ECONNRESET|terminating connection/.test(JSON.stringify(x.assertionResults) + (x.message || '')))) {
+      console.log('[test-resumo] todas as falhas são de conexão: problema de ambiente (Postgres/WSL), não de código.');
+    }
+  }
+  console.log('[test-resumo] mais lentas:');
+  for (const x of [...suites].sort((a, b) => duracao(b) - duracao(a)).slice(0, 5)) {
+    console.log(`  - ${duracao(x).toFixed(1)}s ${nome(x)}`);
+  }
 }
 
 /** Tenta abrir uma conexão. Devolve true/false, nunca lança. */
@@ -134,6 +172,8 @@ async function main() {
     falhar(err.message);
   }
 
+  manterWslAcordado(DISTRO);
+
   if (!(await conecta(cfg, 'postgres'))) {
     const local = ['127.0.0.1', 'localhost', '::1'].includes(cfg.host);
     if (process.env.TEST_DB_AUTOSTART === '0' || !local) {
@@ -149,13 +189,21 @@ async function main() {
   }
 
   await garantirBancoDeTeste(cfg);
+  if (!(await conecta(cfg, cfg.database))) {
+    falhar(`o Postgres deixou de responder em ${cfg.host}:${cfg.port} antes de iniciar o Jest. Rode novamente.`);
+  }
   log(`banco de teste pronto (${cfg.database}). Rodando o Jest...\n`);
 
-  const jest = spawnSync(process.execPath, [require.resolve('jest/bin/jest'), ...process.argv.slice(2)], {
-    cwd: BACKEND_DIR,
-    stdio: 'inherit',
-    env: process.env
-  });
+  // Localmente para na 1ª suíte com falha (o restante costuma ser efeito dela). `--no-bail` ou CI roda tudo.
+  const args = process.argv.slice(2);
+  if (!process.env.CI && !args.some((a) => /^--(no-)?bail/.test(a))) args.push('--bail');
+  const relatorio = path.join(os.tmpdir(), `jest-resumo-${process.pid}.json`);
+  const jest = spawnSync(
+    process.execPath,
+    [require.resolve('jest/bin/jest'), ...args, '--json', `--outputFile=${relatorio}`],
+    { cwd: BACKEND_DIR, stdio: 'inherit', env: process.env }
+  );
+  imprimirResumo(relatorio);
   process.exit(jest.status === null ? 1 : jest.status);
 }
 

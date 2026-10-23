@@ -5,6 +5,7 @@ const { spawnSync } = require('child_process');
 const backend = path.join(__dirname, '..', '..', 'backend');
 const { Pool } = require(path.join(backend, 'node_modules', 'pg'));
 const { semear, cenarioPadrao } = require(path.join(backend, 'test', 'helpers', 'setup.js'));
+const { manterWslAcordado } = require(path.join(backend, 'scripts', 'wslKeepalive.js'));
 const { db } = require('./env');
 
 const CONTAINER = process.env.TEST_DB_CONTAINER || 'pg-controle';
@@ -26,6 +27,7 @@ async function conecta(database) {
 
 /** Se o Postgres de teste não responde, tenta iniciar o container existente (o mesmo do `npm test` do backend). */
 async function garantirPostgres() {
+  manterWslAcordado(DISTRO); // sem isso o WSL desliga ocioso e derruba o Postgres no meio da suíte
   if (await conecta('postgres')) return;
   const args = ['start', CONTAINER];
   const r =

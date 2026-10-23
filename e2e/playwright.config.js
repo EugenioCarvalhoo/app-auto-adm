@@ -13,6 +13,9 @@ module.exports = defineConfig({
   workers: 1,
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,
+  // Localmente para na 1ª falha: o resto costuma ser consequência (ambiente, seed, serviço fora do ar) e deve
+  // ser analisado antes de continuar. Use E2E_MAX_FAILURES=0 para rodar tudo; no CI roda tudo.
+  maxFailures: process.env.CI ? 0 : parseInt(process.env.E2E_MAX_FAILURES ?? '1', 10),
   timeout: 30_000,
   expect: { timeout: 7_000 },
   reporter: [['list'], ['html', { open: 'never' }]],
