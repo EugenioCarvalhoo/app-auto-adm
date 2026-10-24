@@ -11,7 +11,7 @@ O usuário fotografa (ou envia) um boleto ou nota, a IA do Gemini lê a imagem e
 - **Código antigo:** não reaproveitar. Reescrever na arquitetura limpa do Nest (`backend/src/boletos`), usando a branch antiga só como referência de decisões.
 - **Imagem:** guardada num **volume local** atrás de uma porta (`Storage`) abstraída, de modo que trocar por S3-compatível (MinIO, R2, S3) seja só um novo adaptador.
 - **Modelo:** família Gemini Flash, configurável por `GEMINI_MODEL` (confirmar o identificador vigente na documentação do Google na task T4).
-- **Integração (revisto em 23/10/2026):** chamada **direta à API REST do Gemini** com `fetch` nativo, sem SDK (o `@google/genai` foi tentado primeiro e removido por decisão do dono). Modelo padrão `gemini-2.5-flash`, configurável por `GEMINI_MODEL`. Atrás da porta `ExtratorBoleto`, para o resto do sistema não conhecer o provedor.
+- **Integração (revisto em 23/10/2026):** chamada **direta à API REST do Gemini** com `fetch` nativo, sem SDK (o `@google/genai` foi tentado primeiro e removido por decisão do dono). Modelo padrão `gemini-3.8-flash` (o 2.5 Flash não é mais liberado para projetos novos), configurável por `GEMINI_MODEL`. Atrás da porta `ExtratorBoleto`, para o resto do sistema não conhecer o provedor.
 - **Ordem e entrega em duas partes:** **T4 a T6 vêm primeiro.** O backend (T4 e T5) é entregue e **o dono testa a API** (Marco 1A) antes de o frontend (T6) começar. Só depois do Marco 1B seguem anexo, baixa e exclusão lógica.
 
 ## 3. Requisitos

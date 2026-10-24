@@ -62,7 +62,7 @@ describe('GeminiExtrator (API REST contra servidor HTTP local)', () => {
   let falso;
   let porta;
   const env = {};
-  const CHAVES = ['GEMINI_API_KEY', 'GEMINI_BASE_URL', 'GEMINI_MODEL', 'GEMINI_TIMEOUT_MS', 'GEMINI_THINKING_BUDGET'];
+  const CHAVES = ['GEMINI_API_KEY', 'GEMINI_BASE_URL', 'GEMINI_MODEL', 'GEMINI_TIMEOUT_MS', 'GEMINI_THINKING_BUDGET', 'GEMINI_THINKING_LEVEL'];
   let logs;
 
   beforeAll(async () => {
@@ -126,16 +126,22 @@ describe('GeminiExtrator (API REST contra servidor HTTP local)', () => {
     expect(JSON.stringify(corpo)).not.toContain(CHAVE_FALSA);
   });
 
-  it('desliga o raciocínio por padrão (orçamento 0), aceita outro orçamento e nada com NONE', async () => {
-    const orcamento = () => falso.estado.requisicoes.at(-1).corpo.generationConfig?.thinkingConfig?.thinkingBudget;
+  it('raciocínio por família: 3.x usa nível LOW; 2.5 usa orçamento 0; variáveis sobrescrevem; NONE não envia', async () => {
+    const cfg = () => falso.estado.requisicoes.at(-1).corpo.generationConfig?.thinkingConfig;
     await new GeminiExtrator().extrair(PNG, 'image/png');
-    expect(orcamento()).toBe(0);
+    expect(cfg()).toEqual({ thinkingLevel: 'LOW' });
+    process.env.GEMINI_MODEL = 'gemini-2.5-flash';
+    await new GeminiExtrator().extrair(PNG, 'image/png');
+    expect(cfg()).toEqual({ thinkingBudget: 0 });
     process.env.GEMINI_THINKING_BUDGET = '512';
     await new GeminiExtrator().extrair(PNG, 'image/png');
-    expect(orcamento()).toBe(512);
-    process.env.GEMINI_THINKING_BUDGET = 'NONE';
+    expect(cfg()).toEqual({ thinkingBudget: 512 });
+    process.env.GEMINI_THINKING_LEVEL = 'minimal';
     await new GeminiExtrator().extrair(PNG, 'image/png');
-    expect(orcamento()).toBeUndefined();
+    expect(cfg()).toEqual({ thinkingLevel: 'MINIMAL' });
+    process.env.GEMINI_THINKING_LEVEL = 'NONE';
+    await new GeminiExtrator().extrair(PNG, 'image/png');
+    expect(cfg()).toBeUndefined();
   });
 
   it('se o modelo recusar o thinkingConfig (400 thinking), repete uma vez sem ele e devolve o resultado', async () => {
@@ -173,9 +179,9 @@ describe('GeminiExtrator (API REST contra servidor HTTP local)', () => {
   });
 
   it('sem GEMINI_MODEL usa o modelo padrão da família Flash', async () => {
-    expect(GEMINI_MODEL_PADRAO).toBe('gemini-2.5-flash');
+    expect(GEMINI_MODEL_PADRAO).toBe('gemini-3.8-flash');
     await new GeminiExtrator().extrair(PNG, 'image/png');
-    expect(falso.estado.requisicoes[0].url).toContain('/models/gemini-2.5-flash:generateContent');
+    expect(falso.estado.requisicoes[0].url).toContain('/models/gemini-3.8-flash:generateContent');
   });
 
   it('disponivel() é true só com GEMINI_API_KEY preenchida (espaços não contam)', () => {

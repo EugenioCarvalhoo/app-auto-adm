@@ -3,7 +3,8 @@ import { ErroExtratorIndisponivel } from '../application/extracao.portas';
 import type { ExtratorBoleto } from '../application/extracao.portas';
 import type { MimeImagem } from '../domain/extracao';
 
-export const GEMINI_MODEL_PADRAO = 'gemini-2.5-flash';
+// O 2.5 Flash já não é liberado para projetos novos; o 3.x é o indicado pelo próprio Google.
+export const GEMINI_MODEL_PADRAO = 'gemini-3.8-flash';
 export const GEMINI_TIMEOUT_PADRAO_MS = 60000;
 export const GEMINI_URL_PADRAO = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -34,18 +35,27 @@ const ESQUEMA = {
 } as const;
 
 interface ConfigPensamento {
-  thinkingConfig?: { thinkingBudget: number };
+  thinkingConfig?: { thinkingBudget: number } | { thinkingLevel: string };
 }
 
 /**
- * Ler um boleto não exige raciocínio: o modelo 2.5 Flash aceita orçamento 0 (desligado), que reduz a latência.
- * GEMINI_THINKING_BUDGET: inteiro (0 = desligado, padrão; -1 = automático) ou NONE (não envia thinkingConfig).
+ * Ler um boleto não exige muito raciocínio. A API muda por família de modelo: o 2.5 usa orçamento de tokens
+ * (0 = desligado) e o 3.x usa níveis (LOW). Padrão automático pelo nome do modelo; sobrescreva com
+ * GEMINI_THINKING_LEVEL (LOW, MINIMAL, ...) ou GEMINI_THINKING_BUDGET (inteiro, -1 = automático).
+ * NONE em qualquer um dos dois não envia thinkingConfig. Se o modelo recusar, o adaptador repete sem o parâmetro.
  */
-function configPensamento(raw: string | undefined): ConfigPensamento {
-  const texto = (raw ?? '0').trim().toUpperCase();
-  if (texto === 'NONE') return {};
-  const n = Number(texto);
-  return { thinkingConfig: { thinkingBudget: Number.isInteger(n) && n >= -1 ? n : 0 } };
+function configPensamento(modelo: string, nivel: string | undefined, orcamento: string | undefined): ConfigPensamento {
+  const n = nivel?.trim().toUpperCase();
+  const o = orcamento?.trim().toUpperCase();
+  if (n === 'NONE' || o === 'NONE') return {};
+  if (n) return { thinkingConfig: { thinkingLevel: n } };
+  if (o) {
+    const v = Number(o);
+    return { thinkingConfig: { thinkingBudget: Number.isInteger(v) && v >= -1 ? v : 0 } };
+  }
+  return /gemini-2\.5/i.test(modelo)
+    ? { thinkingConfig: { thinkingBudget: 0 } }
+    : { thinkingConfig: { thinkingLevel: 'LOW' } };
 }
 
 function inteiroPositivo(raw: string | undefined, padrao: number): number {
@@ -113,7 +123,7 @@ export class GeminiExtrator implements ExtratorBoleto {
     };
 
     try {
-      const pensamento = configPensamento(process.env.GEMINI_THINKING_BUDGET);
+      const pensamento = configPensamento(modelo, process.env.GEMINI_THINKING_LEVEL, process.env.GEMINI_THINKING_BUDGET);
       let corpo: unknown;
       try {
         corpo = await chamar(pensamento);
