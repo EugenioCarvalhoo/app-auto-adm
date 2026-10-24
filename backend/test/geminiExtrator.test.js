@@ -133,9 +133,9 @@ describe('GeminiExtrator (SDK oficial contra servidor HTTP local)', () => {
   });
 
   it('sem GEMINI_MODEL usa o modelo padrão da família Flash', async () => {
-    expect(GEMINI_MODEL_PADRAO).toBe('gemini-2.5-flash');
+    expect(GEMINI_MODEL_PADRAO).toBe('gemini-3.8-flash');
     await new GeminiExtrator().extrair(PNG, 'image/png');
-    expect(falso.estado.requisicoes[0].url).toContain('/models/gemini-2.5-flash:generateContent');
+    expect(falso.estado.requisicoes[0].url).toContain('/models/gemini-3.8-flash:generateContent');
   });
 
   it('disponivel() é true só com GEMINI_API_KEY preenchida (espaços não contam)', () => {

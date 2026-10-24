@@ -4,7 +4,7 @@ import { ErroExtratorIndisponivel } from '../application/extracao.portas';
 import type { ExtratorBoleto } from '../application/extracao.portas';
 import type { MimeImagem } from '../domain/extracao';
 
-export const GEMINI_MODEL_PADRAO = 'gemini-2.5-flash';
+export const GEMINI_MODEL_PADRAO = 'gemini-3.8-flash';
 export const GEMINI_TIMEOUT_PADRAO_MS = 30000;
 
 const INSTRUCAO_SISTEMA =
