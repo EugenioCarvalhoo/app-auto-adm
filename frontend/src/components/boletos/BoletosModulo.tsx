@@ -11,6 +11,7 @@ import {
   vencimentoEfetivo
 } from '../../lib/boletosSemana';
 import { mensagemErro, type ErroApi } from '../../lib/erros';
+import PreviewImagem from './PreviewImagem';
 import { reduzirImagem, TIPOS_IMAGEM_ACEITOS } from '../../lib/imagem';
 import type { Boleto, Meta, SemanaResumo, SugestaoBoleto, TipoDado } from '../../types';
 import './BoletosModulo.css';
@@ -111,7 +112,41 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
   const [avisoLeitura, setAvisoLeitura] = useState<string | null>(null);
   const leituraAbort = useRef<AbortController | null>(null);
 
+  const [fotoUrl, setFotoUrl] = useState<string | null>(null);
+  const [previewAberto, setPreviewAberto] = useState(false);
+  const fotoUrlRef = useRef<string | null>(null);
+  const botaoVerImagem = useRef<HTMLButtonElement>(null);
+
+  const descartarFoto = useCallback(() => {
+    if (fotoUrlRef.current) URL.revokeObjectURL(fotoUrlRef.current);
+    fotoUrlRef.current = null;
+    setFotoUrl(null);
+    setPreviewAberto(false);
+  }, []);
+
+  const guardarFoto = (arquivo: Blob) => {
+    if (fotoUrlRef.current) URL.revokeObjectURL(fotoUrlRef.current);
+    const url = URL.createObjectURL(arquivo);
+    fotoUrlRef.current = url;
+    setFotoUrl(url);
+    setPreviewAberto(false);
+  };
+
+  useEffect(
+    () => () => {
+      if (fotoUrlRef.current) URL.revokeObjectURL(fotoUrlRef.current);
+      fotoUrlRef.current = null;
+    },
+    []
+  );
+
+  const fecharPreview = () => {
+    setPreviewAberto(false);
+    window.setTimeout(() => botaoVerImagem.current?.focus(), 0);
+  };
+
   const limparIa = () => {
+    descartarFoto();
     setCamposIa([]);
     setLinhaDigitavel(null);
     setLinhaCopiada(false);
@@ -129,11 +164,12 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
 
   useEffect(() => {
     cancelarLeitura();
+    descartarFoto();
     setCamposIa([]);
     setLinhaDigitavel(null);
     setErroLeitura(null);
     setAvisoLeitura(null);
-  }, [restauranteId, cancelarLeitura]);
+  }, [restauranteId, cancelarLeitura, descartarFoto]);
 
   const alterar = (campo: CampoTexto, valor: string) => {
     setForm((atual) => ({ ...atual, [campo]: valor }));
@@ -153,6 +189,7 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
     try {
       const imagem = await reduzirImagem(arquivo);
       if (controle.signal.aborted) return;
+      guardarFoto(imagem);
       const corpo = new FormData();
       corpo.append('restaurante_id', String(restauranteId));
       corpo.append('imagem', imagem, imagem.name);
@@ -578,6 +615,22 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
               />
             </label>
           </div>
+          {fotoUrl && (
+            <div className="boletos-ia-foto">
+              <button
+                ref={botaoVerImagem}
+                type="button"
+                className="boletos-btn-ghost boletos-ia-ver"
+                onClick={() => setPreviewAberto(true)}
+                aria-haspopup="dialog"
+                data-testid="ia-ver-imagem"
+              >
+                Ver imagem
+              </button>
+              <span className="boletos-ia-foto-nota">Só nesta tela; a imagem não é enviada para guardar.</span>
+            </div>
+          )}
+          {fotoUrl && previewAberto && <PreviewImagem url={fotoUrl} onFechar={fecharPreview} />}
           <div aria-live="polite" role="status" data-testid="ia-status">
             {lendo && (
               <div className="boletos-ia-lendo">
@@ -586,7 +639,10 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
                 <button
                   type="button"
                   className="boletos-btn-ghost boletos-ia-cancelar"
-                  onClick={cancelarLeitura}
+                  onClick={() => {
+                    cancelarLeitura();
+                    descartarFoto();
+                  }}
                   data-testid="ia-cancelar"
                 >
                   Cancelar

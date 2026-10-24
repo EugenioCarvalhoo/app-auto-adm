@@ -1000,3 +1000,77 @@
     padding: 1rem 16px;
   }
 }
+
+.boletos-ia-foto {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.boletos-ia-ver {
+  min-height: 44px;
+  padding: 0 1rem;
+}
+
+.boletos-ia-foto-nota {
+  color: #7b8794;
+  font-size: 0.8rem;
+}
+
+.boletos-ia-preview-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  background: rgba(20, 28, 36, 0.78);
+}
+
+.boletos-ia-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 960px;
+  max-height: 100%;
+  padding: 0.6rem;
+  box-sizing: border-box;
+  background: #fff;
+  border-radius: 10px;
+}
+
+.boletos-ia-preview-barra {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.boletos-ia-preview-btn {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 1rem;
+}
+
+.boletos-ia-preview-area {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  text-align: center;
+  background: #f2f5f8;
+  border-radius: 6px;
+}
+
+.boletos-ia-preview-img {
+  max-width: 100%;
+  max-height: calc(100vh - 7rem);
+  max-height: calc(100dvh - 7rem);
+  object-fit: contain;
+}
+
+.boletos-ia-preview-img--real {
+  max-width: none;
+  max-height: none;
+}
