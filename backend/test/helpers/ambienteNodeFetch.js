@@ -1,5 +1,5 @@
 /**
- * Ambiente Jest para os testes que usam o SDK @google/genai contra um servidor local.
+ * Ambiente Jest para os testes do adaptador do Gemini (fetch) contra um servidor local.
  *
  * O SDK faz fetch pelo dispatcher global do undici (`Symbol.for('undici.globalDispatcher.1')`). Dentro do
  * sandbox do Jest esse símbolo não existe no `globalThis` do teste, e a chamada falha com

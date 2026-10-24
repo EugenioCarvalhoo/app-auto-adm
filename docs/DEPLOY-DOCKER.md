@@ -93,4 +93,4 @@ O código antigo ainda roda nos dois ambientes. O **primeiro deploy do código n
 - **Imagens base sem versão fixa:** a documentação recomenda fixar versão ou digest das imagens base; hoje são `node:20-alpine` e `nginx:alpine`.
 
 ## Pendência
-O Node foi para a versão 20 (`node:20-alpine` no back e no front, CI com `node-version: 20`) em 23/10/2026, exigência do SDK `@google/genai`. **Redeploy do backend no Easypanel** é necessário para usar a nova imagem. Seguem pendentes `nginx:alpine` sem versão fixa e vulnerabilidades apontadas pelo IDE (ver `docs/BACKLOG.md`, T-01).
+O Node foi para a versão 20 (`node:20-alpine` no back e no front, CI com `node-version: 20`) em 23/10/2026, motivado pelo SDK `@google/genai`, depois removido (a leitura por IA usa `fetch` direto; o Node 20 permanece por ser mais novo que o 18, que está sem suporte). **Redeploy do backend no Easypanel** é necessário para usar a nova imagem. Seguem pendentes `nginx:alpine` sem versão fixa e vulnerabilidades apontadas pelo IDE (ver `docs/BACKLOG.md`, T-01).

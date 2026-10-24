@@ -171,4 +171,4 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
   - Bugs conhecidos do Express preservados de propósito (cobertos com `it.failing` nos testes de contrato): corrigir em tarefa própria e trocar para `it`.
 
 ## 10. Node 20 (23/10/2026)
-- Backend e frontend passaram de `node:18-alpine` para `node:20-alpine` (Dockerfiles) e o CI para `node-version: 20`, porque o SDK `@google/genai` exige Node >= 20. Nest segue em 10.x. Redeploy do backend no Easypanel necessário. Variáveis novas da IA e migration 018 documentadas em `docs/DEPLOY-DOCKER.md`.
+- Backend e frontend passaram de `node:18-alpine` para `node:20-alpine` (Dockerfiles) e o CI para `node-version: 20`, porque o SDK `@google/genai` exigia Node >= 20 (o SDK foi removido depois: a IA usa `fetch` direto com `gemini-2.5-flash`). Nest segue em 10.x. Redeploy do backend no Easypanel necessário. Variáveis novas da IA e migration 018 documentadas em `docs/DEPLOY-DOCKER.md`.

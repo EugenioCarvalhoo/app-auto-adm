@@ -65,7 +65,7 @@ describe('configuração da leitura por IA (ambiente)', () => {
 
   describe('Gemini (padrões do adaptador)', () => {
     it('modelo padrão é o Flash e o timeout padrão é 30 s', () => {
-      expect(GEMINI_MODEL_PADRAO).toBe('gemini-flash-latest');
+      expect(GEMINI_MODEL_PADRAO).toBe('gemini-2.5-flash');
       expect(GEMINI_TIMEOUT_PADRAO_MS).toBe(60000);
     });
   });

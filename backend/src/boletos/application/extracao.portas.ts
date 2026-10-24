@@ -14,7 +14,7 @@ export class ErroExtratorIndisponivel extends Error {
 
 /**
  * Lê a imagem de um boleto/nota e devolve a resposta BRUTA do modelo (não confiável, a sanear no domínio).
- * O adaptador isola o SDK; o resto do sistema não o conhece.
+ * O adaptador isola a chamada à API do Gemini; o resto do sistema não a conhece.
  */
 export interface ExtratorBoleto {
   /** False quando não há credencial configurada (a rota responde 503). */

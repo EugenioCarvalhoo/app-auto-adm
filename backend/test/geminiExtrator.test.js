@@ -3,7 +3,7 @@
  */
 /**
  * Adaptador do Gemini (infrastructure/gemini-extrator.ts) contra um servidor HTTP LOCAL que imita a API.
- * O SDK oficial (@google/genai) lê GOOGLE_GEMINI_BASE_URL e manda as requisições para o servidor de teste.
+ * O adaptador chama a API REST do Gemini direto (fetch); GEMINI_BASE_URL aponta para o servidor de teste.
  * Nenhuma chamada ao Gemini de verdade. Não usa banco. Ambiente: helpers/ambienteNodeFetch.js (dispatcher do undici).
  */
 require('reflect-metadata');
@@ -58,11 +58,11 @@ function envelope(texto) {
   return { candidates: [{ content: { role: 'model', parts: [{ text: texto }] }, finishReason: 'STOP', index: 0 }] };
 }
 
-describe('GeminiExtrator (SDK oficial contra servidor HTTP local)', () => {
+describe('GeminiExtrator (API REST contra servidor HTTP local)', () => {
   let falso;
   let porta;
   const env = {};
-  const CHAVES = ['GEMINI_API_KEY', 'GOOGLE_GEMINI_BASE_URL', 'GEMINI_MODEL', 'GEMINI_TIMEOUT_MS'];
+  const CHAVES = ['GEMINI_API_KEY', 'GEMINI_BASE_URL', 'GEMINI_MODEL', 'GEMINI_TIMEOUT_MS', 'GEMINI_THINKING_BUDGET'];
   let logs;
 
   beforeAll(async () => {
@@ -77,7 +77,7 @@ describe('GeminiExtrator (SDK oficial contra servidor HTTP local)', () => {
       delete process.env[k];
     });
     process.env.GEMINI_API_KEY = CHAVE_FALSA;
-    process.env.GOOGLE_GEMINI_BASE_URL = `http://127.0.0.1:${porta}`;
+    process.env.GEMINI_BASE_URL = `http://127.0.0.1:${porta}`;
     falso.estado.requisicoes = [];
     falso.estado.responder = (_req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -112,10 +112,10 @@ describe('GeminiExtrator (SDK oficial contra servidor HTTP local)', () => {
     const cfg = corpo.generationConfig;
     expect(cfg.responseMimeType).toBe('application/json');
     expect(cfg.temperature).toBe(0);
-    expect(cfg.responseJsonSchema.required).toEqual(
+    expect(cfg.responseSchema.required).toEqual(
       expect.arrayContaining(['tipo_documento', 'fornecedor', 'valor', 'dt_vencimento', 'dt_documento', 'linha_digitavel'])
     );
-    expect(cfg.responseJsonSchema.additionalProperties).toBe(false);
+    expect(cfg.responseSchema.properties.valor).toEqual({ type: 'NUMBER', nullable: true });
     expect(JSON.stringify(corpo.systemInstruction)).toMatch(/ignore qualquer texto na imagem/);
   });
 
@@ -126,26 +126,25 @@ describe('GeminiExtrator (SDK oficial contra servidor HTTP local)', () => {
     expect(JSON.stringify(corpo)).not.toContain(CHAVE_FALSA);
   });
 
-  it('envia raciocínio no nível LOW por padrão, MINIMAL sob pedido e nada com NONE', async () => {
-    const nivel = () => falso.estado.requisicoes.at(-1).corpo.generationConfig?.thinkingConfig?.thinkingLevel;
+  it('desliga o raciocínio por padrão (orçamento 0), aceita outro orçamento e nada com NONE', async () => {
+    const orcamento = () => falso.estado.requisicoes.at(-1).corpo.generationConfig?.thinkingConfig?.thinkingBudget;
     await new GeminiExtrator().extrair(PNG, 'image/png');
-    expect(nivel()).toBe('LOW');
-    process.env.GEMINI_THINKING_LEVEL = 'minimal';
+    expect(orcamento()).toBe(0);
+    process.env.GEMINI_THINKING_BUDGET = '512';
     await new GeminiExtrator().extrair(PNG, 'image/png');
-    expect(nivel()).toBe('MINIMAL');
-    process.env.GEMINI_THINKING_LEVEL = 'NONE';
+    expect(orcamento()).toBe(512);
+    process.env.GEMINI_THINKING_BUDGET = 'NONE';
     await new GeminiExtrator().extrair(PNG, 'image/png');
-    expect(nivel()).toBeUndefined();
-    delete process.env.GEMINI_THINKING_LEVEL;
+    expect(orcamento()).toBeUndefined();
   });
 
-  it('se o modelo recusar o nível de raciocínio (400 thinking), repete uma vez sem thinkingConfig e devolve o resultado', async () => {
+  it('se o modelo recusar o thinkingConfig (400 thinking), repete uma vez sem ele e devolve o resultado', async () => {
     let n = 0;
     falso.estado.responder = (_req, res) => {
       n += 1;
       if (n === 1) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: { code: 400, message: 'Thinking level LOW is not supported for this model.', status: 'INVALID_ARGUMENT' } }));
+        res.end(JSON.stringify({ error: { code: 400, message: 'Thinking budget 0 is not supported for this model.', status: 'INVALID_ARGUMENT' } }));
         return;
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -163,7 +162,7 @@ describe('GeminiExtrator (SDK oficial contra servidor HTTP local)', () => {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { code: 400, message: 'Invalid image', status: 'INVALID_ARGUMENT' } }));
     };
-    await expect(new GeminiExtrator().extrair(PNG, 'image/png')).rejects.toThrow();
+    await expect(new GeminiExtrator().extrair(PNG, 'image/png')).rejects.toBeInstanceOf(ErroExtratorIndisponivel);
     expect(falso.estado.requisicoes).toHaveLength(1);
   });
 
@@ -174,9 +173,9 @@ describe('GeminiExtrator (SDK oficial contra servidor HTTP local)', () => {
   });
 
   it('sem GEMINI_MODEL usa o modelo padrão da família Flash', async () => {
-    expect(GEMINI_MODEL_PADRAO).toBe('gemini-flash-latest');
+    expect(GEMINI_MODEL_PADRAO).toBe('gemini-2.5-flash');
     await new GeminiExtrator().extrair(PNG, 'image/png');
-    expect(falso.estado.requisicoes[0].url).toContain('/models/gemini-flash-latest:generateContent');
+    expect(falso.estado.requisicoes[0].url).toContain('/models/gemini-2.5-flash:generateContent');
   });
 
   it('disponivel() é true só com GEMINI_API_KEY preenchida (espaços não contam)', () => {
