@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { ErroExtratorIndisponivel } from '../application/extracao.portas';
 import type { ExtratorBoleto } from '../application/extracao.portas';
 import type { MimeImagem } from '../domain/extracao';
 
 export const GEMINI_MODEL_PADRAO = 'gemini-3.8-flash';
-export const GEMINI_TIMEOUT_PADRAO_MS = 30000;
+export const GEMINI_TIMEOUT_PADRAO_MS = 60000;
 
 const INSTRUCAO_SISTEMA =
   'Você extrai dados de uma foto de boleto bancário, boleto de cobrança ou nota fiscal/cupom de um restaurante brasileiro. ' +
@@ -33,6 +33,16 @@ const ESQUEMA = {
   required: ['tipo_documento', 'fornecedor', 'valor', 'dt_vencimento', 'dt_documento', 'linha_digitavel'],
   additionalProperties: false
 } as const;
+
+/**
+ * Ler um boleto não exige raciocínio: nível mínimo reduz a latência (e o 504 DEADLINE_EXCEEDED dos modelos que pensam).
+ * GEMINI_THINKING_LEVEL aceita MINIMAL (padrão), LOW ou NONE (não envia thinkingConfig, para modelos que o rejeitem).
+ */
+function configPensamento(raw: string | undefined): { thinkingConfig?: { thinkingLevel: ThinkingLevel } } {
+  const nivel = (raw ?? 'MINIMAL').trim().toUpperCase();
+  if (nivel === 'NONE') return {};
+  return { thinkingConfig: { thinkingLevel: nivel === 'LOW' ? ThinkingLevel.LOW : ThinkingLevel.MINIMAL } };
+}
 
 function inteiroPositivo(raw: string | undefined, padrao: number): number {
   const n = Number(raw);
@@ -71,7 +81,8 @@ export class GeminiExtrator implements ExtratorBoleto {
           responseMimeType: 'application/json',
           responseJsonSchema: ESQUEMA,
           temperature: 0,
-          maxOutputTokens: 1024,
+          maxOutputTokens: 2048,
+          ...configPensamento(process.env.GEMINI_THINKING_LEVEL),
           abortSignal: AbortSignal.timeout(timeout),
           httpOptions: { timeout }
         }

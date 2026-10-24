@@ -126,6 +126,19 @@ describe('GeminiExtrator (SDK oficial contra servidor HTTP local)', () => {
     expect(JSON.stringify(corpo)).not.toContain(CHAVE_FALSA);
   });
 
+  it('envia raciocínio no nível mínimo por padrão, LOW sob pedido e nada com NONE', async () => {
+    const nivel = () => falso.estado.requisicoes.at(-1).corpo.generationConfig?.thinkingConfig?.thinkingLevel;
+    await new GeminiExtrator().extrair(PNG, 'image/png');
+    expect(nivel()).toBe('MINIMAL');
+    process.env.GEMINI_THINKING_LEVEL = 'low';
+    await new GeminiExtrator().extrair(PNG, 'image/png');
+    expect(nivel()).toBe('LOW');
+    process.env.GEMINI_THINKING_LEVEL = 'NONE';
+    await new GeminiExtrator().extrair(PNG, 'image/png');
+    expect(nivel()).toBeUndefined();
+    delete process.env.GEMINI_THINKING_LEVEL;
+  });
+
   it('usa GEMINI_MODEL quando definido', async () => {
     process.env.GEMINI_MODEL = 'gemini-modelo-de-teste';
     await new GeminiExtrator().extrair(PNG, 'image/png');
