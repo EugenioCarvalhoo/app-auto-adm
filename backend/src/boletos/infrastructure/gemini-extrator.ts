@@ -7,6 +7,10 @@ import type { MimeImagem } from '../domain/extracao';
 export const GEMINI_MODEL_PADRAO = 'gemini-3.8-flash';
 export const GEMINI_TIMEOUT_PADRAO_MS = 60000;
 export const GEMINI_MAX_RETENTATIVAS = 2;
+// Modelo de reserva (liberado para projetos novos, mais leve) usado depois da 2ª falha temporária. GEMINI_MODEL_FALLBACK=NONE desliga.
+export const GEMINI_MODEL_RESERVA_PADRAO = 'gemini-3.5-flash-lite';
+// Erros temporários que a documentação do Gemini manda repetir (com espera crescente e aleatória).
+const STATUS_TRANSITORIOS = new Set([429, 500, 503, 504]);
 export const GEMINI_ATRASO_PADRAO_MS = 1500;
 export const GEMINI_URL_PADRAO = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -99,7 +103,8 @@ export class GeminiExtrator implements ExtratorBoleto {
     if (!chave) throw new ErroExtratorIndisponivel();
     const timeout = inteiroPositivo(process.env.GEMINI_TIMEOUT_MS, GEMINI_TIMEOUT_PADRAO_MS);
     const principal = process.env.GEMINI_MODEL?.trim() || GEMINI_MODEL_PADRAO;
-    const reserva = process.env.GEMINI_MODEL_FALLBACK?.trim() || undefined;
+    const reservaBruta = process.env.GEMINI_MODEL_FALLBACK?.trim();
+    const reserva = reservaBruta?.toUpperCase() === 'NONE' ? undefined : reservaBruta || GEMINI_MODEL_RESERVA_PADRAO;
     const atrasoMs = inteiroPositivo(process.env.GEMINI_RETRY_DELAY_MS, GEMINI_ATRASO_PADRAO_MS);
     const base = (process.env.GEMINI_BASE_URL?.trim() || GEMINI_URL_PADRAO).replace(/\/+$/, '');
     const dados = imagem.toString('base64');
@@ -150,12 +155,15 @@ export class GeminiExtrator implements ExtratorBoleto {
           corpo = await tentar(modelo);
           break;
         } catch (erro) {
-          // 503 (alta demanda no provedor) é transitório: até 2 retentativas com espera crescente, dentro do prazo total.
-          const transitorio = erro instanceof ErroHttpGemini && erro.status === 503;
-          const espera = atrasoMs * (tentativa + 1);
-          if (!transitorio || tentativa >= GEMINI_MAX_RETENTATIVAS || restante() <= espera + 2000) throw erro;
+          // Erros temporários do provedor (429/500/503/504): até 2 retentativas com espera crescente e aleatória
+          // (jitter), dentro do prazo total. Outros erros (400/403/404) falham na hora.
+          const status = erro instanceof ErroHttpGemini ? erro.status : undefined;
+          const espera = Math.round(atrasoMs * (tentativa + 1) * (0.75 + Math.random() * 0.5));
+          if (status === undefined || !STATUS_TRANSITORIOS.has(status) || tentativa >= GEMINI_MAX_RETENTATIVAS || restante() <= espera + 2000) {
+            throw erro;
+          }
           if (tentativa >= 1 && reserva && reserva !== modelo) modelo = reserva;
-          console.warn(`Gemini: indisponível (503); nova tentativa ${tentativa + 1}/${GEMINI_MAX_RETENTATIVAS}`);
+          console.warn(`Gemini: indisponível (${status}); nova tentativa ${tentativa + 1}/${GEMINI_MAX_RETENTATIVAS}`);
           await new Promise((r) => setTimeout(r, espera));
         }
       }

@@ -8,7 +8,7 @@
  */
 require('reflect-metadata');
 const http = require('http');
-const { GeminiExtrator, GEMINI_MODEL_PADRAO } = require('../src/boletos/infrastructure/gemini-extrator');
+const { GeminiExtrator, GEMINI_MODEL_PADRAO, GEMINI_MODEL_RESERVA_PADRAO: GEMINI_MODELO_RESERVA_PADRAO } = require('../src/boletos/infrastructure/gemini-extrator');
 const { ErroExtratorIndisponivel } = require('../src/boletos/application/extracao.portas');
 
 const CHAVE_FALSA = 'chave-de-teste-nao-e-real-123';
@@ -215,6 +215,36 @@ describe('GeminiExtrator (API REST contra servidor HTTP local)', () => {
       'modelo-principal',
       'modelo-reserva'
     ]);
+  });
+
+  it('sem GEMINI_MODEL_FALLBACK a reserva padrão é o flash-lite; NONE desliga a troca de modelo', async () => {
+    process.env.GEMINI_RETRY_DELAY_MS = '5';
+    process.env.GEMINI_MODEL = 'modelo-principal';
+    falso.estado.responder = (_req, res) => resposta503(res);
+    const modelos = () => falso.estado.requisicoes.map((r) => r.url.match(/models\/([^:]+):/)[1]);
+    await new GeminiExtrator().extrair(PNG, 'image/png').catch(() => undefined);
+    expect(modelos()).toEqual(['modelo-principal', 'modelo-principal', GEMINI_MODELO_RESERVA_PADRAO]);
+    expect(GEMINI_MODELO_RESERVA_PADRAO).toBe('gemini-3.5-flash-lite');
+
+    falso.estado.requisicoes = [];
+    process.env.GEMINI_MODEL_FALLBACK = 'none';
+    await new GeminiExtrator().extrair(PNG, 'image/png').catch(() => undefined);
+    expect(modelos()).toEqual(['modelo-principal', 'modelo-principal', 'modelo-principal']);
+  });
+
+  it.each([429, 500, 504])('status %i também é temporário: repete e recupera', async (status) => {
+    process.env.GEMINI_RETRY_DELAY_MS = '5';
+    falso.estado.responder = (_req, res) => {
+      if (falso.estado.requisicoes.length === 1) {
+        res.writeHead(status, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: { code: status, message: 'temporário' } }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(envelope(TEXTO_MODELO)));
+    };
+    expect(await new GeminiExtrator().extrair(PNG, 'image/png')).toBe(TEXTO_MODELO);
+    expect(falso.estado.requisicoes).toHaveLength(2);
   });
 
   it('outros erros (ex.: 403) não são repetidos', async () => {
