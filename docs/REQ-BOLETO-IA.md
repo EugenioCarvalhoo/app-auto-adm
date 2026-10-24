@@ -56,6 +56,37 @@ Cada task termina com: testes verdes (`qa-tests`), `typecheck` e `build`, commit
 | **T14** | Cobertura final e E2E completo (Gemini mockado), docs e guia de deploy (volume, variáveis, chave como secret no Easypanel), atualizar `docs/HISTORICO-ETAPAS.md` e o backlog | qa-tests + devops-docs | tudo | CI verde; você roda o E2E |
 | **T15** *(depois)* | Adaptador S3-compatível para `Storage` (MinIO/R2/S3), `STORAGE_DRIVER=s3` | backend-api | T2 | Mesma suíte da porta passa nos dois adaptadores |
 
+## 4.1 Status em 24/10/2026
+
+**Entregue e testado** (branch `feat/boleto-ia`): T1a (migrations 018 e 019 do limite diário), T4, T5 (backend: 619 testes), T6 (frontend) e o preview da imagem (botão "Ver imagem" + modal). Testes: backend 27 suítes/619; front 43 testes novos; E2E `ia-leitura` + `boletos` 14/14. Marco 1A validado pelo dono (API com chave real).
+
+**Pendente, na ordem sugerida**
+
+| Ordem | Task | Observação |
+|---|---|---|
+| 1 | **Marco 1B** | O dono valida o fluxo completo na interface (em andamento) |
+| 2 | **T0 (resto)** | Documentar no `CLAUDE.md`/`DEPLOY-DOCKER.md` o modelo padrão, reserva, variáveis (`GEMINI_*`) e o log `[ia]` |
+| 3 | **T2** | Porta `Storage` + adaptador de volume local |
+| 4 | **T3** | Volume no Docker/Easypanel |
+| 5 | **T1b + T7** | Migration `boletos_anexos` + salvar/ler o anexo (`GET /api/boletos/:id/anexo`), com acesso por `restaurante_id` do registro |
+| 6 | **T8** | Frontend: ver o anexo salvo (substitui a limitação do preview, que hoje só mostra a foto local da sessão) |
+| 7 | **T9 e T10** | Baixa de pagamento (back e front) |
+| 8 | **T11 e T12** | Exclusão lógica (back e front) |
+| 9 | **T13** | Auditoria de segurança do conjunto (upload, prompt injection, IDOR em anexo/pagamento/restauração, abuso de custo, vazamento da chave) |
+| 10 | **T14** | Cobertura final, E2E completo, docs e guia de deploy; atualizar `HISTORICO-ETAPAS.md` |
+| 11 | **T15** | Adaptador S3-compatível para `Storage` |
+
+**Itens novos surgidos durante a execução**
+- **Salvar a linha digitável:** hoje a IA a lê e o front a mostra para copiar, mas o cadastro não tem o campo. Precisa de coluna (a homologação já tem `boletos_notas.linha_digitavel` da versão antiga) e decisão sobre unicidade/duplicidade. Candidato a task própria depois da T7.
+- **Schemas divergentes entre ambientes:** a homologação recebeu a versão antiga da IA e já tem objetos que as tasks T7, T9 e T11 também criam (`boletos_anexos`, `boletos_ocorrencias`, colunas `pago*`, `deleted_*`, `usuarios.pode_marcar_pago`). Produção e bancos locais não têm. **As migrations dessas tasks devem ser idempotentes (`IF NOT EXISTS`/`ADD COLUMN IF NOT EXISTS`) e conferir o formato de objetos pré-existentes**, como a 019 fez para `boletos_extracoes_uso`.
+- **Cobertura que ficou:** E2E de 429/502 e do zoom do preview; isolamento de `/api/boletos/extrair` entre dois gerentes na camada de integração do front; teste de mutação nos testes de segurança; bug do repositório de limite com limite 0 (`it.failing`, não alcançável pela API).
+- **Reavaliar:** a Interactions API do Google (recomendada pelas mensagens de erro) caso o `generateContent` receba aviso de descontinuação; fixar o modelo (hoje o padrão é `gemini-3.5-flash-lite`, reserva `gemini-3.6-flash`); Node 22 (o 20 já saiu de suporte).
+
+**Aprendizados da integração com o Gemini** (para não repetir):
+- `gemini-2.5-flash` só serve a projetos antigos (404 em contas novas). `gemini-3.8-flash` aceita raciocínio `low/medium/high` (não `minimal`) e levou **52 s** numa imagem de 98 KB. `gemini-3.5-flash-lite` levou **8,8 s** na mesma imagem e é o padrão.
+- 503 "alta demanda" ocorre: o adaptador repete 429/500/503/504 com espera crescente e usa o modelo de reserva depois da 2ª falha.
+- O erro 42703 era mascarado como "rode a migração 014"; agora o motivo real vai para o log.
+
 ## 5. Pontos a decidir ao chegar na task
 - **T5:** valor do limite diário (`EXTRAIR_LIMITE_DIARIO`), tamanho máximo da imagem e identificador do modelo Flash vigente.
 - **T7:** política de retenção do anexo quando o boleto é excluído (manter por quanto tempo).
