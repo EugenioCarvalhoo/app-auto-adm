@@ -41,7 +41,11 @@ export class TratarErrosInterceptor implements NestInterceptor {
 function traduzir(error: unknown, opcoes: OpcoesTratamentoErro): ErroAplicacao {
   const cod = codigoErro(error);
   const especifico = cod ? opcoes.mapa?.[cod] : undefined;
-  if (especifico) return new ErroAplicacao(especifico.codigo, especifico.mensagem);
+  if (especifico) {
+    // Só a mensagem do Postgres (ex.: 'column "x" does not exist'), para saber qual migration falta; nunca dados da requisição.
+    console.warn(`${opcoes.log ?? opcoes.mensagem500} [${cod}] ${mensagemErro(error)}`);
+    return new ErroAplicacao(especifico.codigo, especifico.mensagem);
+  }
 
   console.error(opcoes.log ?? `${opcoes.mensagem500}:`, error);
   if (ehTabelaInexistente(error)) return new ErroAplicacao('INDISPONIVEL', MSG_BANCO_DESATUALIZADO);
