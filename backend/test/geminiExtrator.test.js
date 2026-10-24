@@ -62,7 +62,7 @@ describe('GeminiExtrator (API REST contra servidor HTTP local)', () => {
   let falso;
   let porta;
   const env = {};
-  const CHAVES = ['GEMINI_API_KEY', 'GEMINI_BASE_URL', 'GEMINI_MODEL', 'GEMINI_TIMEOUT_MS', 'GEMINI_THINKING_BUDGET', 'GEMINI_THINKING_LEVEL', 'GEMINI_MODEL_FALLBACK', 'GEMINI_RETRY_DELAY_MS'];
+  const CHAVES = ['GEMINI_API_KEY', 'GEMINI_BASE_URL', 'GEMINI_MODEL', 'GEMINI_TIMEOUT_MS', 'GEMINI_THINKING_BUDGET', 'GEMINI_THINKING_LEVEL', 'GEMINI_MODEL_FALLBACK', 'GEMINI_RETRY_DELAY_MS', 'GEMINI_MEDIA_RESOLUTION'];
   let logs;
 
   beforeAll(async () => {
@@ -130,6 +130,9 @@ describe('GeminiExtrator (API REST contra servidor HTTP local)', () => {
     const cfg = () => falso.estado.requisicoes.at(-1).corpo.generationConfig?.thinkingConfig;
     await new GeminiExtrator().extrair(PNG, 'image/png');
     expect(cfg()).toEqual({ thinkingLevel: 'LOW' });
+    process.env.GEMINI_MODEL = 'gemini-3.5-flash-lite';
+    await new GeminiExtrator().extrair(PNG, 'image/png');
+    expect(cfg()).toEqual({ thinkingLevel: 'MINIMAL' });
     process.env.GEMINI_MODEL = 'gemini-2.5-flash';
     await new GeminiExtrator().extrair(PNG, 'image/png');
     expect(cfg()).toEqual({ thinkingBudget: 0 });
@@ -254,6 +257,26 @@ describe('GeminiExtrator (API REST contra servidor HTTP local)', () => {
     };
     await expect(new GeminiExtrator().extrair(PNG, 'image/png')).rejects.toBeInstanceOf(ErroExtratorIndisponivel);
     expect(falso.estado.requisicoes).toHaveLength(1);
+  });
+
+  it('GEMINI_MEDIA_RESOLUTION só é enviada quando definida com valor válido', async () => {
+    const res = () => falso.estado.requisicoes.at(-1).corpo.generationConfig.mediaResolution;
+    await new GeminiExtrator().extrair(PNG, 'image/png');
+    expect(res()).toBeUndefined();
+    process.env.GEMINI_MEDIA_RESOLUTION = 'low';
+    await new GeminiExtrator().extrair(PNG, 'image/png');
+    expect(res()).toBe('MEDIA_RESOLUTION_LOW');
+    process.env.GEMINI_MEDIA_RESOLUTION = 'banana';
+    await new GeminiExtrator().extrair(PNG, 'image/png');
+    expect(res()).toBeUndefined();
+  });
+
+  it('registra o tempo da resposta sem nenhum dado do documento', async () => {
+    await new GeminiExtrator().extrair(PNG, 'image/png');
+    const linha = logs.find((l) => l.startsWith('[ia]'));
+    expect(linha).toMatch(/^\[ia\] modelo=\S+ tentativa=1 resposta_ms=\d+ total_ms=\d+ imagem_kb=\d+$/);
+    expect(linha).not.toContain('150.75');
+    expect(linha).not.toContain(CHAVE_FALSA);
   });
 
   it('usa GEMINI_MODEL quando definido', async () => {

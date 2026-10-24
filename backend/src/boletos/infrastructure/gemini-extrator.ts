@@ -59,9 +59,15 @@ function configPensamento(modelo: string, nivel: string | undefined, orcamento: 
     const v = Number(o);
     return { thinkingConfig: { thinkingBudget: Number.isInteger(v) && v >= -1 ? v : 0 } };
   }
-  return /gemini-2\.5/i.test(modelo)
-    ? { thinkingConfig: { thinkingBudget: 0 } }
-    : { thinkingConfig: { thinkingLevel: 'LOW' } };
+  if (/gemini-2\.5/i.test(modelo)) return { thinkingConfig: { thinkingBudget: 0 } };
+  // Flash-Lite e 3.6 Flash aceitam MINIMAL (mais rápido); o 3.8 Flash só aceita low/medium/high.
+  return { thinkingConfig: { thinkingLevel: /flash-lite|gemini-3\.6/i.test(modelo) ? 'MINIMAL' : 'LOW' } };
+}
+
+/** GEMINI_MEDIA_RESOLUTION (LOW, MEDIUM, HIGH): menos tokens por imagem = resposta mais rápida, com risco de perder texto pequeno. Padrão: do modelo. */
+function configResolucao(raw: string | undefined): { mediaResolution?: string } {
+  const v = raw?.trim().toUpperCase();
+  return v === 'LOW' || v === 'MEDIUM' || v === 'HIGH' ? { mediaResolution: `MEDIA_RESOLUTION_${v}` } : {};
 }
 
 function inteiroPositivo(raw: string | undefined, padrao: number): number {
@@ -123,6 +129,7 @@ export class GeminiExtrator implements ExtratorBoleto {
             responseSchema: ESQUEMA,
             temperature: 0,
             maxOutputTokens: 2048,
+            ...configResolucao(process.env.GEMINI_MEDIA_RESOLUTION),
             ...pensamento
           }
         }),
@@ -152,7 +159,10 @@ export class GeminiExtrator implements ExtratorBoleto {
       let modelo = principal;
       for (let tentativa = 0; ; tentativa += 1) {
         try {
+          const t0 = Date.now();
           corpo = await tentar(modelo);
+          // Só números e nome do modelo (nenhum dado do documento): permite achar onde o tempo vai.
+          console.log(`[ia] modelo=${modelo} tentativa=${tentativa + 1} resposta_ms=${Date.now() - t0} total_ms=${Date.now() - inicio} imagem_kb=${Math.round(imagem.length / 1024)}`);
           break;
         } catch (erro) {
           // Erros temporários do provedor (429/500/503/504): até 2 retentativas com espera crescente e aleatória
