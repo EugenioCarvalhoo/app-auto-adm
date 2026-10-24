@@ -1,7 +1,7 @@
 /** Readiness com verificação de migrations (Postgres real, tudo migrado) e helper ehTabelaInexistente. */
 const request = require('supertest');
 const { usarBancoReal } = require('./helpers/setup');
-const { ehTabelaInexistente, MSG_BANCO_DESATUALIZADO } = require('../lib/erros');
+const { ehTabelaInexistente, MSG_BANCO_DESATUALIZADO } = require('../src/shared/domain/erros');
 
 const env = usarBancoReal();
 const ARQUIVO = '017_remove_legado_gastos_estoque.sql';
