@@ -15,7 +15,7 @@ Os dois têm `HEALTHCHECK` (API: `GET /api/health`, liveness sem banco; web: `GE
 O `CMD` da imagem já aplica as migrations pendentes e inicia a API:
 
 ```
-node database/migrate.js && exec node dist/server.js
+node database/migrate.js && exec node dist/main.js
 ```
 
 - A `migrate.js` é idempotente (registra as aplicadas em `schema_migrations`), então rodar a cada boot é seguro. Se a migration falhar, o container sai e a API não sobe.

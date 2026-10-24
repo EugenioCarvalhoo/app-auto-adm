@@ -4,7 +4,7 @@ const {
   semanaMes,
   vencimentoEfetivo,
   grupoSemana
-} = require('../lib/boletosSemana');
+} = require('../src/boletos/domain/boletosSemana');
 
 describe('INTERVALOSEMANA', () => {
   test('sábado inicia a semana e sexta encerra', () => {

@@ -5,10 +5,10 @@ Três camadas: **Jest + Supertest** no backend (Postgres real), **Jest + Testing
 ## Backend (`backend/`)
 
 - **Unitários:** funções puras em `lib/` (ex.: `test/boletosSemana.test.js`, `test/erros.test.js`).
-- **Integração:** **Supertest** contra o `app` Express exportado por `server.ts`, com **Postgres real** em banco `*_test`. Detalhes em `backend/test/README.md`. Só `test/health.test.js` ainda mocka o `pg`.
+- **Integração:** **Supertest** contra o `app` Express montado pela camada de compatibilidade `backend/server.ts` (que reexporta o app NestJS de `src/`), com **Postgres real** em banco `*_test`. Detalhes em `backend/test/README.md`. Só `test/health.test.js` ainda mocka o `pg`.
 - **Upgrade e migrations pendentes:** `test/upgrade.test.js` monta o estado da migration 015 com dados em um banco isolado (`controle_financeiro_upgrade_test`), aplica 016+017 com o `migrate.js` e confere vínculos, índices, boletos/metas e idempotência; `test/healthMigrations.test.js` cobre `/api/health/ready`. O upgrade cria e apaga bancos `*_upgrade_test`.
 - **Não rode duas execuções de `npm test` ao mesmo tempo** no mesmo banco (causa deadlocks). No Windows, o container `pg-controle` pode ser derrubado pelo WSL ocioso: `wsl -d Ubuntu -- docker start pg-controle`.
-- O servidor só chama `listen()` quando o arquivo é executado diretamente (`node dist/server.js`), permitindo `require('../server')` nos testes sem abrir porta.
+- O servidor só chama `listen()` quando o arquivo é executado diretamente (`node dist/main.js`), permitindo carregar o app nos testes via `require('../server')` nos testes sem abrir porta.
 - Com `NODE_ENV=test`, o backend não faz ping inicial ao PostgreSQL nem imprime logs de configuração do banco.
 - O `npm test` sobe o Postgres de teste (Docker) sozinho.
 

@@ -10,7 +10,7 @@ describe('lib/loadEnv', () => {
     jest.resetModules();
     jest.doMock('dotenv', () => ({ __esModule: true, default: { config }, config }));
     jest.spyOn(fs, 'existsSync').mockImplementation((p) => existe(String(p)));
-    require('../lib/loadEnv');
+    require('../src/config/loadEnv');
     jest.dontMock('dotenv');
     return config;
   }

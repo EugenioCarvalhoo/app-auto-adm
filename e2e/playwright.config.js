@@ -36,7 +36,7 @@ module.exports = defineConfig({
   webServer: [
     {
       name: 'api',
-      command: 'npx tsx server.ts',
+      command: 'npx tsx src/main.ts',
       cwd: path.join(raiz, 'backend'),
       url: `http://127.0.0.1:${API_PORT}/api/health`,
       reuseExistingServer: reuse,

@@ -28,4 +28,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
 
 # Aplica as migrations pendentes (idempotente, via schema_migrations) e inicia a API.
 # RUN_MIGRATIONS=0 pula as migrations. `exec` deixa o Node como PID 1 para receber o SIGTERM.
-CMD ["sh", "-c", "if [ \"$RUN_MIGRATIONS\" != \"0\" ]; then node database/migrate.js || exit 1; fi; exec node dist/server.js"]
+CMD ["sh", "-c", "if [ \"$RUN_MIGRATIONS\" != \"0\" ]; then node database/migrate.js || exit 1; fi; exec node dist/main.js"]

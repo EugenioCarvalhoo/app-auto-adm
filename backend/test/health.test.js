@@ -20,13 +20,13 @@ jest.mock('pg', () => ({
 
 const request = require('supertest');
 const { MIGRATIONS } = require('../database/lista-migrations');
+const { criarApp } = require('./helpers/app');
 
 describe('GET /health', () => {
   let app;
 
-  beforeAll(() => {
-    // eslint-disable-next-line global-require
-    app = require('../server');
+  beforeAll(async () => {
+    ({ app } = await criarApp());
   });
 
   beforeEach(() => {

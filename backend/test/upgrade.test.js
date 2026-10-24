@@ -10,6 +10,7 @@ const { Pool } = require('pg');
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
 const { dbConfig } = require('./helpers/dbConfig');
+const { criarApp } = require('./helpers/app');
 const { MIGRATIONS } = require('../database/lista-migrations');
 
 const DIR_MIGRATIONS = path.join(__dirname, '..', 'database', 'migrations');
@@ -27,7 +28,7 @@ async function pendentes(pool) {
   let lib = null;
   try {
     // eslint-disable-next-line global-require
-    lib = require('../lib/migracoes');
+    lib = require('../src/health/infrastructure/pg-saude');
   } catch (e) {
     lib = null;
   }
@@ -179,9 +180,8 @@ describe('upgrade de banco existente (015 -> 017)', () => {
       jest.spyOn(console, 'error').mockImplementation(() => {});
       try {
         await jest.isolateModulesAsync(async () => {
-          // eslint-disable-next-line global-require
-          const app = require('../server');
-          appPool = app.locals.pool;
+          const { app, pool: poolDoApp } = await criarApp();
+          appPool = poolDoApp;
           const token = jwt.sign({ id: 1, username: 'admin', is_admin: true }, 'jest_jwt_secret', { expiresIn: '1h' });
           const res = await request(app).get('/api/admin/usuarios-permissoes').set('Authorization', `Bearer ${token}`);
           expect(res.status).toBe(503);
