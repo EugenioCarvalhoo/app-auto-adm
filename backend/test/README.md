@@ -55,7 +55,7 @@ npx jest                          # Jest puro (exige o Postgres já no ar)
 
 ## Como funciona
 
-1. `globalSetup.js` (uma vez por execução): derruba e recria o schema `public` do banco de teste e roda `database/migrate.js` — assim o próprio migrate e as migrations 001–015 são exercitados a cada execução.
+1. `globalSetup.js` (uma vez por execução): derruba e recria o schema `public` do banco de teste e roda `database/migrate.js` — assim o próprio migrate e as migrations 001–018 são exercitados a cada execução.
 2. `helpers/setup.js` — `usarBancoReal()` carrega o app real (`server.ts`, compat sobre `src/`), abre o pool e, **antes de cada teste**, limpa as tabelas e grava o cenário padrão (`cenarioPadrao()`): restaurantes A=1, B=2 e inativo=3; usuários `admin`, `gerenteA`, `gerenteB`, `semModulo`, `semVinculo`, `financeiroLegado`; um boleto e uma meta por restaurante.
 3. Os testes chamam a API com `supertest` e conferem a resposta **e** o banco (`env.rows(sql)`, `env.um(sql)`).
 4. A suíte roda com um worker só (`maxWorkers: 1`), porque todos os arquivos compartilham o mesmo banco.
@@ -78,6 +78,12 @@ npx jest                          # Jest puro (exige o Postgres já no ar)
 | `migrations.test.js` | schema, regra da 015 com dados reais, idempotência do migrate |
 | `upgrade.test.js` | banco isolado: estado 015 com dados, aplica 016+017 pelo `migrate.js`, confere vínculos, índices, boletos/metas e idempotência |
 | `healthMigrations.test.js` | `/api/health/ready`: 200 com migrations em dia, 503 com pendentes, 503 com banco inacessível |
+| `contratoExtracao.test.js` | `POST /api/boletos/extrair` (leitura por IA): 200/400/401/403/413/415/429/502/503, chaves exatas, nada gravado em `boletos_notas`, limite consumido/devolvido no banco. Extrator FALSO (`jest.mock` do adaptador Gemini); limite real |
+| `limiteDiario.test.js` | `PgLimiteDiarioRepository` no Postgres: limite, concorrência (10 simultâneas), devolução sem ficar negativa, virada do dia, independência entre usuários |
+| `geminiExtrator.test.js` | Adaptador `GeminiExtrator` com o SDK oficial (`@google/genai`) contra um **servidor HTTP local** (via `GOOGLE_GEMINI_BASE_URL`): requisição (imagem base64, esquema JSON, chave no cabeçalho), 500, resposta sem texto, timeout. Sem Gemini real. Usa o ambiente `helpers/ambienteNodeFetch.js` |
+| `unit/extracaoDominio.test.js` | Domínio da leitura por IA: MIME por magic bytes, valor em centavos, datas, fornecedor, linha digitável (DVs mod 10/11), saneamento do JSON da IA |
+| `unit/extrairBoletoCasoDeUso.test.js` | Caso de uso `ExtrairBoleto` com portas falsas: ordem das validações (403 não chama IA nem limite), falha do provedor, devolução da reserva |
+| `unit/extracaoConfig.test.js` | `EXTRAIR_LIMITE_DIARIO`, `IMAGEM_MAX_MB` e padrões do Gemini (valores inválidos voltam ao padrão) |
 
 ## Testes de contrato (`contrato*.test.js`)
 
