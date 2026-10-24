@@ -129,10 +129,10 @@ describe('GeminiExtrator (API REST contra servidor HTTP local)', () => {
   it('raciocínio por família: 3.x usa nível LOW; 2.5 usa orçamento 0; variáveis sobrescrevem; NONE não envia', async () => {
     const cfg = () => falso.estado.requisicoes.at(-1).corpo.generationConfig?.thinkingConfig;
     await new GeminiExtrator().extrair(PNG, 'image/png');
-    expect(cfg()).toEqual({ thinkingLevel: 'LOW' });
-    process.env.GEMINI_MODEL = 'gemini-3.5-flash-lite';
+    expect(cfg()).toEqual({ thinkingLevel: 'MINIMAL' }); // padrão = flash-lite
+    process.env.GEMINI_MODEL = 'gemini-3.8-flash';
     await new GeminiExtrator().extrair(PNG, 'image/png');
-    expect(cfg()).toEqual({ thinkingLevel: 'MINIMAL' });
+    expect(cfg()).toEqual({ thinkingLevel: 'LOW' }); // o 3.8 só aceita low/medium/high
     process.env.GEMINI_MODEL = 'gemini-2.5-flash';
     await new GeminiExtrator().extrair(PNG, 'image/png');
     expect(cfg()).toEqual({ thinkingBudget: 0 });
@@ -220,14 +220,14 @@ describe('GeminiExtrator (API REST contra servidor HTTP local)', () => {
     ]);
   });
 
-  it('sem GEMINI_MODEL_FALLBACK a reserva padrão é o flash-lite; NONE desliga a troca de modelo', async () => {
+  it('sem GEMINI_MODEL_FALLBACK a reserva padrão é o 3.6 Flash; NONE desliga a troca de modelo', async () => {
     process.env.GEMINI_RETRY_DELAY_MS = '5';
     process.env.GEMINI_MODEL = 'modelo-principal';
     falso.estado.responder = (_req, res) => resposta503(res);
     const modelos = () => falso.estado.requisicoes.map((r) => r.url.match(/models\/([^:]+):/)[1]);
     await new GeminiExtrator().extrair(PNG, 'image/png').catch(() => undefined);
     expect(modelos()).toEqual(['modelo-principal', 'modelo-principal', GEMINI_MODELO_RESERVA_PADRAO]);
-    expect(GEMINI_MODELO_RESERVA_PADRAO).toBe('gemini-3.5-flash-lite');
+    expect(GEMINI_MODELO_RESERVA_PADRAO).toBe('gemini-3.6-flash');
 
     falso.estado.requisicoes = [];
     process.env.GEMINI_MODEL_FALLBACK = 'none';
@@ -286,9 +286,9 @@ describe('GeminiExtrator (API REST contra servidor HTTP local)', () => {
   });
 
   it('sem GEMINI_MODEL usa o modelo padrão da família Flash', async () => {
-    expect(GEMINI_MODEL_PADRAO).toBe('gemini-3.8-flash');
+    expect(GEMINI_MODEL_PADRAO).toBe('gemini-3.5-flash-lite');
     await new GeminiExtrator().extrair(PNG, 'image/png');
-    expect(falso.estado.requisicoes[0].url).toContain('/models/gemini-3.8-flash:generateContent');
+    expect(falso.estado.requisicoes[0].url).toContain('/models/gemini-3.5-flash-lite:generateContent');
   });
 
   it('disponivel() é true só com GEMINI_API_KEY preenchida (espaços não contam)', () => {

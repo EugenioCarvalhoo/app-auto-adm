@@ -3,12 +3,13 @@ import { ErroExtratorIndisponivel } from '../application/extracao.portas';
 import type { ExtratorBoleto } from '../application/extracao.portas';
 import type { MimeImagem } from '../domain/extracao';
 
-// O 2.5 Flash já não é liberado para projetos novos; o 3.x é o indicado pelo próprio Google.
-export const GEMINI_MODEL_PADRAO = 'gemini-3.8-flash';
+// Medido em 23/10/2026 com uma imagem de 98 KB: gemini-3.8-flash levou 52 s; o Flash-Lite foi bem mais rápido.
+// O 2.5 Flash já não é liberado para projetos novos.
+export const GEMINI_MODEL_PADRAO = 'gemini-3.5-flash-lite';
 export const GEMINI_TIMEOUT_PADRAO_MS = 60000;
 export const GEMINI_MAX_RETENTATIVAS = 2;
-// Modelo de reserva (liberado para projetos novos, mais leve) usado depois da 2ª falha temporária. GEMINI_MODEL_FALLBACK=NONE desliga.
-export const GEMINI_MODEL_RESERVA_PADRAO = 'gemini-3.5-flash-lite';
+// Modelo de reserva (estável, aceita raciocínio MINIMAL) usado depois da 2ª falha temporária. GEMINI_MODEL_FALLBACK=NONE desliga.
+export const GEMINI_MODEL_RESERVA_PADRAO = 'gemini-3.6-flash';
 // Erros temporários que a documentação do Gemini manda repetir (com espera crescente e aleatória).
 const STATUS_TRANSITORIOS = new Set([429, 500, 503, 504]);
 export const GEMINI_ATRASO_PADRAO_MS = 1500;
