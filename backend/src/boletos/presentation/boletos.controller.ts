@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Inject, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { AuthGuard } from '../../acesso/presentation/auth.guard';
 import { ModuloBoletosGuard } from '../../acesso/presentation/modulo-boletos.guard';
 import { UsuarioAtual } from '../../acesso/presentation/usuario.decorator';
@@ -11,6 +11,8 @@ import {
   ListarBoletosUseCase,
   ResumoBoletosUseCase
 } from '../application/boletos.casos-de-uso';
+import { ExtrairBoletoUseCase } from '../application/extrair-boleto.caso-de-uso';
+import { ImagemUploadInterceptor } from './imagem-upload.interceptor';
 import {
   AtualizarMetaUseCase,
   ExcluirMetaUseCase,
@@ -39,7 +41,8 @@ export class BoletosController {
     @Inject(ListarMetasUseCase) private readonly listarMetas: ListarMetasUseCase,
     @Inject(SalvarMetaUseCase) private readonly salvarMeta: SalvarMetaUseCase,
     @Inject(AtualizarMetaUseCase) private readonly atualizarMeta: AtualizarMetaUseCase,
-    @Inject(ExcluirMetaUseCase) private readonly excluirMeta: ExcluirMetaUseCase
+    @Inject(ExcluirMetaUseCase) private readonly excluirMeta: ExcluirMetaUseCase,
+    @Inject(ExtrairBoletoUseCase) private readonly extrair: ExtrairBoletoUseCase
   ) {}
 
   // ========== Boletos e notas ==========
@@ -72,6 +75,23 @@ export class BoletosController {
   })
   cadastrar(@UsuarioAtual() u: AuthUser, @Body() body: Corpo) {
     return this.criar.executar(u.id, body || {});
+  }
+
+  /** Leitura por IA: devolve a sugestão e NÃO grava nada. multipart: restaurante_id + imagem. */
+  @Post('extrair')
+  @HttpCode(200)
+  @UseInterceptors(ImagemUploadInterceptor)
+  @TratarErros({
+    mensagem500: 'Erro ao ler a imagem do boleto',
+    log: 'Erro ao extrair boleto:',
+    mapa: { '42703': SEM_MIGRACAO_014 }
+  })
+  extrairDaImagem(
+    @UsuarioAtual() u: AuthUser,
+    @Body() body: Corpo,
+    @UploadedFile() arquivo: { buffer?: Buffer } | undefined
+  ) {
+    return this.extrair.executar(u.id, body?.restaurante_id, arquivo?.buffer);
   }
 
   // ========== Metas (rotas fixas antes das com :id) ==========
