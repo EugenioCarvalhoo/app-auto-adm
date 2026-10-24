@@ -13,7 +13,7 @@ Regras detalhadas e arquitetura: [CLAUDE.md](./CLAUDE.md). Histórico das etapas
 - **Entrega:** Docker (uma imagem para a API, outra para o front com nginx), Easypanel, GitHub Actions.
 
 ## Pré-requisitos
-- Node.js 18+
+- Node.js 20+
 - PostgreSQL 12+ (ou Docker)
 
 ## Rodar em desenvolvimento

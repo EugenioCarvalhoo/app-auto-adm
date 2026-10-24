@@ -48,7 +48,7 @@ Origem: auditoria do `security-reviewer` e bugs do `qa-tests`. Branch sugerida: 
 
 | ID | Item | Dono | Pronto quando |
 |---|---|---|---|
-| T-01 | Subir imagens base (`node:18-alpine` sem suporte, `nginx:alpine`). Exige Node 20+, `@types/node`, CI e talvez Nest 11 | devops-docs + backend-api | Imagens sem vulnerabilidades críticas; suíte e E2E verdes |
+| T-01 | Subir imagens base. Parte do Node feita em 23/10/2026 (`node:20-alpine` no back e no front, CI em Node 20). Falta: fixar `nginx:alpine`, revisar `@types/node` e vulnerabilidades, talvez Nest 11 | devops-docs + backend-api | Imagens sem vulnerabilidades críticas; suíte e E2E verdes |
 | T-02 | Logs: tirar `console.log` de Login e CriarBoleto em produção; logger com níveis | backend-api | Nenhum dado sensível nos logs |
 | T-03 | Testes unitários que faltam: casos de uso de metas, admin, restaurantes e health; guards, filtro de exceções e `JwtTokenService` | qa-tests | Cobertura sem depender do banco |
 | T-04 | Enxugar sobreposição entre `contratoErrosBanco` e unitários (após as correções de segurança) | qa-tests | Suíte mais rápida sem perda de cobertura |

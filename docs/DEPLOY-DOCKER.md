@@ -31,6 +31,13 @@ node database/migrate.js && exec node dist/main.js
 | `PORT` | não | Padrão `5000`. O domínio do Easypanel deve apontar para essa porta. |
 | `RUN_MIGRATIONS` | não | `0` desliga as migrations no boot. |
 | `LOG_HTTP` | não | `0` desliga o log de cada requisição. |
+| `GEMINI_API_KEY` | sim para o cadastro de boleto por IA | **Secret** do Easypanel (nunca no repositório). Sem ela a extração por IA fica indisponível. |
+| `GEMINI_MODEL` | não | Modelo do Gemini usado na extração. |
+| `GEMINI_TIMEOUT_MS` | não | Tempo limite da chamada à IA, em milissegundos. |
+| `EXTRAIR_LIMITE_DIARIO` | não | Limite diário de extrações. |
+| `IMAGEM_MAX_MB` | não | Tamanho máximo da imagem enviada, em MB. |
+
+A migration `018_boletos_extracoes_uso` (uso diário de extrações) roda sozinha no deploy, pois o `CMD` executa `migrate.js`.
 
 ### URL da API no front (`REACT_APP_API_URL`)
 O CRA embute `REACT_APP_*` no JavaScript **na hora do build**. Variável de ambiente do container em runtime não muda nada.
@@ -83,7 +90,7 @@ O código antigo ainda roda nos dois ambientes. O **primeiro deploy do código n
 ## Pontos em aberto frente à documentação do Easypanel (builder Dockerfile)
 - **`HEALTHCHECK` no Dockerfile:** a página do builder não fala de healthcheck, então não confirmei como o Easypanel o trata. No Docker funciona (containers `healthy`). Se a API for reiniciada em loop no primeiro deploy, suspeite de migrations que passam de ~2 min (40 s de `start-period` + 3 tentativas de 30 s) e aumente o `--start-period`.
 - **Porta e domínio:** não constam nessa página; a porta do domínio é configurada na tela do serviço.
-- **Imagens base sem versão fixa:** a documentação recomenda fixar versão ou digest das imagens base; hoje são `node:18-alpine` e `nginx:alpine`.
+- **Imagens base sem versão fixa:** a documentação recomenda fixar versão ou digest das imagens base; hoje são `node:20-alpine` e `nginx:alpine`.
 
 ## Pendência
-As imagens base são `node:18-alpine` (Node 18 saiu de suporte) e `nginx:alpine`; o IDE aponta vulnerabilidades nelas. Subir a base exige alinhar `@types/node`, o CI (`node-version: 18`) e testar o CRA, então ficou fora desta mudança.
+O Node foi para a versão 20 (`node:20-alpine` no back e no front, CI com `node-version: 20`) em 23/10/2026, exigência do SDK `@google/genai`. **Redeploy do backend no Easypanel** é necessário para usar a nova imagem. Seguem pendentes `nginx:alpine` sem versão fixa e vulnerabilidades apontadas pelo IDE (ver `docs/BACKLOG.md`, T-01).
