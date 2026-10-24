@@ -1,7 +1,7 @@
 # Dockerfile do backend (Node + TypeScript compilado em dist/)
 
 # Stage 1: build — precisa das devDependencies (typescript, @types/*) para o tsc
-FROM node:18-alpine AS build
+FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -9,7 +9,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: runtime — só dependências de produção + dist/ + database/ (migrate/create_admin em JS puro)
-FROM node:18-alpine
+FROM node:20-alpine
 ENV NODE_ENV=production
 WORKDIR /app
 COPY package*.json ./

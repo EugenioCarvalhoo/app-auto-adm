@@ -64,6 +64,19 @@ export interface Boleto {
   created_at?: string | null;
 }
 
+/** Sugestão da leitura por IA (`POST /api/boletos/extrair`). Nada é gravado; campos ilegíveis vêm `null`. */
+export interface SugestaoBoleto {
+  tipo_documento: 'boleto' | 'nota' | null;
+  tipo_sugerido: TipoDado | null;
+  fornecedor: string | null;
+  valor: number | null;
+  /** AAAA-MM-DD */
+  dt_vencimento: string | null;
+  /** AAAA-MM-DD */
+  dt_documento: string | null;
+  linha_digitavel: string | null;
+}
+
 export interface SemanaResumo {
   chave: string;
   inicio: string;

@@ -29,6 +29,10 @@ export type CodigoErroAplicacao =
   | 'PROIBIDO'
   | 'NAO_ENCONTRADO'
   | 'CONFLITO'
+  | 'PAYLOAD_GRANDE'
+  | 'TIPO_NAO_SUPORTADO'
+  | 'LIMITE_EXCEDIDO'
+  | 'PROVEDOR_INDISPONIVEL'
   | 'INDISPONIVEL'
   | 'INTERNO';
 
