@@ -10,8 +10,9 @@ import {
   parseValorBr,
   vencimentoEfetivo
 } from '../../lib/boletosSemana';
-import { mensagemErro } from '../../lib/erros';
-import type { Boleto, Meta, SemanaResumo, TipoDado } from '../../types';
+import { mensagemErro, type ErroApi } from '../../lib/erros';
+import { reduzirImagem, TIPOS_IMAGEM_ACEITOS } from '../../lib/imagem';
+import type { Boleto, Meta, SemanaResumo, SugestaoBoleto, TipoDado } from '../../types';
 import './BoletosModulo.css';
 
 type Aba = 'resumo' | 'cadastro' | 'metas';
@@ -29,6 +30,29 @@ const VAZIO = {
   valor: '',
   tipo: 'Boleto' as TipoDado
 };
+
+type CampoTexto = 'dt_recebimento' | 'dt_vencimento' | 'descricao' | 'valor';
+type CampoIa = CampoTexto | 'tipo';
+
+function mensagemLeitura(error: unknown): string {
+  const indisponivel = 'Leitura por IA indisponível no momento; preencha manualmente.';
+  if (axios.isAxiosError<ErroApi>(error)) {
+    const status = error.response?.status;
+    const doServidor = error.response?.data?.error;
+    if (status === 413) return 'Imagem muito grande. Tire a foto de novo ou escolha uma menor.';
+    if (status === 415) return 'Use uma foto JPG, PNG ou WebP.';
+    if (status === 503) return indisponivel;
+    if (status === 429 || status === 502 || status === 400) {
+      return doServidor || (status === 429 ? 'Limite diário de leituras por IA atingido.' : indisponivel);
+    }
+    if (!error.response) return 'Sem conexão com o servidor. Preencha manualmente ou tente de novo.';
+    return doServidor || indisponivel;
+  }
+  if (error instanceof Error && error.message === 'Imagem muito grande') {
+    return 'Imagem muito grande. Tire a foto de novo ou escolha uma menor.';
+  }
+  return 'Não foi possível ler a imagem. Preencha manualmente.';
+}
 
 function lancamentoDentroDeUmDia(createdAt: string | null | undefined): boolean {
   if (!createdAt) return false;
@@ -76,6 +100,135 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
   const formRef = useRef<HTMLFormElement>(null);
   const cardRef = useRef<HTMLElement>(null);
   const ultimoCampo = useRef<HTMLElement | null>(null);
+
+  const formAtual = useRef(form);
+  formAtual.current = form;
+  const [lendo, setLendo] = useState(false);
+  const [camposIa, setCamposIa] = useState<CampoIa[]>([]);
+  const [linhaDigitavel, setLinhaDigitavel] = useState<string | null>(null);
+  const [linhaCopiada, setLinhaCopiada] = useState(false);
+  const [erroLeitura, setErroLeitura] = useState<string | null>(null);
+  const [avisoLeitura, setAvisoLeitura] = useState<string | null>(null);
+  const leituraAbort = useRef<AbortController | null>(null);
+
+  const limparIa = () => {
+    setCamposIa([]);
+    setLinhaDigitavel(null);
+    setLinhaCopiada(false);
+    setErroLeitura(null);
+    setAvisoLeitura(null);
+  };
+
+  const cancelarLeitura = useCallback(() => {
+    leituraAbort.current?.abort();
+    leituraAbort.current = null;
+    setLendo(false);
+  }, []);
+
+  useEffect(() => cancelarLeitura, [cancelarLeitura]);
+
+  useEffect(() => {
+    cancelarLeitura();
+    setCamposIa([]);
+    setLinhaDigitavel(null);
+    setErroLeitura(null);
+    setAvisoLeitura(null);
+  }, [restauranteId, cancelarLeitura]);
+
+  const alterar = (campo: CampoTexto, valor: string) => {
+    setForm((atual) => ({ ...atual, [campo]: valor }));
+    setCamposIa((atual) => (atual.includes(campo) ? atual.filter((c) => c !== campo) : atual));
+  };
+
+  const lerPorFoto = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const arquivo = event.target.files?.[0];
+    event.target.value = '';
+    if (!arquivo) return;
+    leituraAbort.current?.abort();
+    const controle = new AbortController();
+    leituraAbort.current = controle;
+    setLendo(true);
+    setErroLeitura(null);
+    setAvisoLeitura(null);
+    try {
+      const imagem = await reduzirImagem(arquivo);
+      if (controle.signal.aborted) return;
+      const corpo = new FormData();
+      corpo.append('restaurante_id', String(restauranteId));
+      corpo.append('imagem', imagem, imagem.name);
+      const { data } = await axios.post<SugestaoBoleto>(`${API_URL}/boletos/extrair`, corpo, {
+        signal: controle.signal
+      });
+      if (controle.signal.aborted) return;
+      aplicarSugestao(data);
+    } catch (error: unknown) {
+      if (controle.signal.aborted || axios.isCancel(error)) return;
+      setErroLeitura(mensagemLeitura(error));
+    } finally {
+      if (leituraAbort.current === controle) {
+        leituraAbort.current = null;
+        setLendo(false);
+      }
+    }
+  };
+
+  const aplicarSugestao = (s: SugestaoBoleto) => {
+    const marcados: CampoIa[] = [];
+    const mantidos: string[] = [];
+    const form = formAtual.current; // valor mais recente: o usuário pode ter digitado durante a leitura
+    const proximo = { ...form };
+    const tipo: TipoDado = s.tipo_sugerido ?? form.tipo;
+    if (s.tipo_sugerido && s.tipo_sugerido !== form.tipo) {
+      proximo.tipo = s.tipo_sugerido;
+      marcados.push('tipo');
+    }
+    if (tipo === 'Sem Boleto') proximo.dt_vencimento = '';
+    const preencher = (campo: CampoTexto, novo: string | null, rotulo: string) => {
+      if (novo == null || novo === '') return;
+      if (form[campo].trim() !== '') {
+        if (form[campo].trim() !== novo) mantidos.push(rotulo);
+        return;
+      }
+      proximo[campo] = novo;
+      marcados.push(campo);
+    };
+    preencher('descricao', s.fornecedor?.trim() || null, 'descrição');
+    preencher('valor', s.valor != null ? String(s.valor).replace('.', ',') : null, 'valor');
+    if (tipo === 'Boleto') preencher('dt_vencimento', s.dt_vencimento, 'vencimento');
+    preencher('dt_recebimento', s.dt_documento, 'data de recebimento');
+    if (tipo === 'Sem Boleto' && !proximo.dt_recebimento) proximo.dt_recebimento = hojeIso();
+    setForm(proximo);
+    setCamposIa((atual) => [...atual.filter((c) => !marcados.includes(c)), ...marcados]);
+    setLinhaDigitavel(s.linha_digitavel?.trim() || null);
+    setLinhaCopiada(false);
+    const vazio = marcados.length === 0 && !s.linha_digitavel;
+    setAvisoLeitura(
+      vazio
+        ? 'Não foi possível identificar dados nesta imagem. Preencha manualmente.'
+        : mantidos.length > 0
+          ? `Mantidos os valores que você já digitou: ${mantidos.join(', ')}.`
+          : null
+    );
+  };
+
+  const copiarLinha = async () => {
+    if (!linhaDigitavel) return;
+    try {
+      await navigator.clipboard.writeText(linhaDigitavel);
+      setLinhaCopiada(true);
+    } catch {
+      setLinhaCopiada(false);
+      setAvisoLeitura('Não foi possível copiar. Selecione o texto e copie manualmente.');
+    }
+  };
+
+  const selo = (campo: CampoIa) =>
+    camposIa.includes(campo) ? (
+      <span className="boletos-ia-selo" data-testid={`ia-selo-${campo}`}>
+        Sugerido pela IA
+      </span>
+    ) : null;
+  const classeIa = (campo: CampoIa) => (camposIa.includes(campo) ? 'boletos-campo--ia' : undefined);
 
   const guardarCampo = (event: React.FocusEvent<HTMLFormElement>) => {
     const alvo = event.target;
@@ -210,6 +363,7 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
   }, [boletos, filtroTabela]);
 
   const mudarTipo = (tipo: TipoDado) => {
+    setCamposIa((atual) => atual.filter((c) => c !== 'tipo'));
     if (tipo === 'Sem Boleto') {
       setForm((atual) => ({
         ...atual,
@@ -260,6 +414,7 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
       }
       setForm(VAZIO);
       setEditandoId(null);
+      limparIa();
       await carregar();
     } catch (error) {
       onMessage?.(mensagemErro(error, 'Não foi possível salvar o lançamento.'));
@@ -269,6 +424,8 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
   };
 
   const editar = (item: Boleto) => {
+    cancelarLeitura();
+    limparIa();
     setAba('cadastro');
     setEditandoId(item.id);
     setForm({
@@ -291,6 +448,7 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
       if (editandoId === id) {
         setEditandoId(null);
         setForm(VAZIO);
+        limparIa();
       }
       await carregar();
     } catch (error) {
@@ -387,6 +545,81 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
           </svg>
         </button>
       </div>
+      {!editandoId && (
+        <div className="boletos-ia" data-testid="ia-painel">
+          <div className="boletos-ia-botoes">
+            <label
+              className={lendo ? 'boletos-ia-btn boletos-ia-btn--off' : 'boletos-ia-btn'}
+              data-testid="ia-ler-foto"
+            >
+              Ler boleto por foto
+              <input
+                type="file"
+                className="boletos-ia-input"
+                accept={TIPOS_IMAGEM_ACEITOS.join(',')}
+                capture="environment"
+                disabled={lendo}
+                onChange={lerPorFoto}
+                data-testid="ia-input-camera"
+              />
+            </label>
+            <label
+              className={lendo ? 'boletos-ia-link boletos-ia-link--off' : 'boletos-ia-link'}
+              data-testid="ia-escolher-arquivo"
+            >
+              Escolher arquivo
+              <input
+                type="file"
+                className="boletos-ia-input"
+                accept={TIPOS_IMAGEM_ACEITOS.join(',')}
+                disabled={lendo}
+                onChange={lerPorFoto}
+                data-testid="ia-input-arquivo"
+              />
+            </label>
+          </div>
+          <div aria-live="polite" role="status" data-testid="ia-status">
+            {lendo && (
+              <div className="boletos-ia-lendo">
+                <span className="boletos-ia-spinner" aria-hidden="true" />
+                <span>Lendo o documento… isso leva alguns segundos</span>
+                <button
+                  type="button"
+                  className="boletos-btn-ghost boletos-ia-cancelar"
+                  onClick={cancelarLeitura}
+                  data-testid="ia-cancelar"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
+            {!lendo && avisoLeitura && (
+              <p className="boletos-ia-aviso" data-testid="ia-aviso">
+                {avisoLeitura}
+              </p>
+            )}
+          </div>
+          {erroLeitura && (
+            <p className="boletos-ia-erro" role="alert" data-testid="ia-erro">
+              {erroLeitura}
+            </p>
+          )}
+          {linhaDigitavel && (
+            <div className="boletos-ia-linha" data-testid="ia-linha-digitavel">
+              <span className="boletos-ia-linha-rotulo">Linha digitável lida (não é salva)</span>
+              <div className="boletos-ia-linha-corpo">
+                <input type="text" readOnly value={linhaDigitavel} aria-label="Linha digitável lida" />
+                <button type="button" className="boletos-btn-ghost" onClick={() => void copiarLinha()}>
+                  {linhaCopiada ? 'Copiado' : 'Copiar'}
+                </button>
+              </div>
+            </div>
+          )}
+          <p className="boletos-ia-confira" data-testid="ia-confira">
+            Confira os dados antes de salvar
+          </p>
+        </div>
+      )}
       <form
         ref={formRef}
         className="boletos-form boletos-form--lancamento"
@@ -395,29 +628,39 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
       >
         <label>
           Tipo de dado <span className="boletos-req">*</span>
-          <select data-boleto-campo="tipo" value={form.tipo} onChange={(e) => mudarTipo(e.target.value as TipoDado)}>
+          {selo('tipo')}
+          <select
+            data-boleto-campo="tipo"
+            className={classeIa('tipo')}
+            value={form.tipo}
+            onChange={(e) => mudarTipo(e.target.value as TipoDado)}
+          >
             <option value="Boleto">Boleto</option>
             <option value="Sem Boleto">Sem Boleto</option>
           </select>
         </label>
         <label>
           Dt. recebimento <span className="boletos-req">*</span>
+          {selo('dt_recebimento')}
           <input
             data-boleto-campo="recebimento"
+            className={classeIa('dt_recebimento')}
             type="date"
             value={form.dt_recebimento}
-            onChange={(e) => setForm({ ...form, dt_recebimento: e.target.value })}
+            onChange={(e) => alterar('dt_recebimento', e.target.value)}
             required
           />
         </label>
         {form.tipo === 'Boleto' ? (
           <label>
             Dt. vencimento <span className="boletos-req">*</span>
+            {selo('dt_vencimento')}
             <input
               data-boleto-campo="vencimento"
+              className={classeIa('dt_vencimento')}
               type="date"
               value={form.dt_vencimento}
-              onChange={(e) => setForm({ ...form, dt_vencimento: e.target.value })}
+              onChange={(e) => alterar('dt_vencimento', e.target.value)}
               required
             />
           </label>
@@ -428,23 +671,27 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
         )}
         <label>
           Descrição <span className="boletos-req">*</span>
+          {selo('descricao')}
           <input
             data-boleto-campo="descricao"
+            className={classeIa('descricao')}
             type="text"
             value={form.descricao}
             placeholder="Ex: Fornecedor de Hortifruti"
-            onChange={(e) => setForm({ ...form, descricao: e.target.value })}
+            onChange={(e) => alterar('descricao', e.target.value)}
             required
           />
         </label>
         <label>
           Valor (R$) <span className="boletos-req">*</span>
+          {selo('valor')}
           <input
             data-boleto-campo="valor"
+            className={classeIa('valor')}
             type="text"
             inputMode="decimal"
             value={form.valor}
-            onChange={(e) => setForm({ ...form, valor: e.target.value })}
+            onChange={(e) => alterar('valor', e.target.value)}
             placeholder="0,00"
             required
           />
@@ -459,6 +706,7 @@ const BoletosModulo: React.FC<Props> = ({ restauranteId, restauranteNome, simple
             onClick={() => {
               setEditandoId(null);
               setForm(VAZIO);
+              limparIa();
             }}
           >
             Cancelar
