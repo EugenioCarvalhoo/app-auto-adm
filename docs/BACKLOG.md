@@ -41,7 +41,7 @@ Origem: auditoria do `security-reviewer` e bugs do `qa-tests`. Branch sugerida: 
 | P-02 | Conferir `Boleto`, `SemanaResumo` e `Meta` em `frontend/src/types.ts` contra `src/boletos` | frontend-ui + qa-tests | Tipos batem campo a campo; teste de contrato do front |
 | P-03 | Testes de tela do front (hoje só `Login` e `userPermissoes`): `BoletosModulo`, `AdminPermissoesUsuarios`, `CadastroRestaurantes` | qa-tests | Cobertura dos fluxos principais com Testing Library |
 | P-04 | Feedback e acessibilidade: estados de carregamento e erro, foco, mensagens vindas da API | frontend-ui | Revisão manual + E2E |
-| P-05 | Decisão de produto: leitura de boleto por foto (IA), baixa de pagamento e exclusão lógica. A branch `feat/boleto-por-imagem` existe, mas foi removida do escopo | Você | Decisão registrada; se voltar, vira épico com requisitos próprios |
+| P-05 | **Decidido (23/10/2026):** leitura de boleto por foto (Gemini), anexo, baixa de pagamento e exclusão lógica entram no escopo, reescritos em tasks. Ver `docs/REQ-BOLETO-IA.md` | Todos | Tasks T0–T15 concluídas e validadas |
 | P-06 | Levantar novas funções com o dono (exportar planilha, alertas de vencimento, relatório por fornecedor, recuperação de senha): hoje nenhuma existe | Você | Itens priorizados ou descartados |
 
 ## P3 — Dívida técnica
@@ -68,6 +68,6 @@ Origem: auditoria do `security-reviewer` e bugs do `qa-tests`. Branch sugerida: 
 
 ## Decisões em aberto
 
-- P-05 e P-06: o que entra no roadmap de produto.
+- P-06: o que mais entra no roadmap de produto (P-05 já decidido).
 - Subir o Node das imagens para 20+ (T-01) antes ou depois do primeiro deploy do Nest.
 - Corrigir os bugs herdados (S-02, S-03, S-08, S-09) antes do primeiro deploy do Nest, o que muda o contrato para melhor, ou depois, em separado.
