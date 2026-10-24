@@ -35,13 +35,13 @@ const ESQUEMA = {
 } as const;
 
 /**
- * Ler um boleto não exige raciocínio: nível mínimo reduz a latência (e o 504 DEADLINE_EXCEEDED dos modelos que pensam).
- * GEMINI_THINKING_LEVEL aceita MINIMAL (padrão), LOW ou NONE (não envia thinkingConfig, para modelos que o rejeitem).
+ * Ler um boleto não exige muito raciocínio: um nível baixo reduz a latência (e o 504 DEADLINE_EXCEEDED dos modelos que pensam).
+ * GEMINI_THINKING_LEVEL aceita LOW (padrão), MINIMAL (nem todo modelo aceita) ou NONE (não envia thinkingConfig).
  */
 function configPensamento(raw: string | undefined): { thinkingConfig?: { thinkingLevel: ThinkingLevel } } {
-  const nivel = (raw ?? 'MINIMAL').trim().toUpperCase();
+  const nivel = (raw ?? 'LOW').trim().toUpperCase();
   if (nivel === 'NONE') return {};
-  return { thinkingConfig: { thinkingLevel: nivel === 'LOW' ? ThinkingLevel.LOW : ThinkingLevel.MINIMAL } };
+  return { thinkingConfig: { thinkingLevel: nivel === 'MINIMAL' ? ThinkingLevel.MINIMAL : ThinkingLevel.LOW } };
 }
 
 function inteiroPositivo(raw: string | undefined, padrao: number): number {
