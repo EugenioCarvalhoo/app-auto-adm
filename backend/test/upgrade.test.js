@@ -1,5 +1,5 @@
 /**
- * Upgrade de um banco EXISTENTE (estado da migration 015, com dados) até a 018, e detecção de
+ * Upgrade de um banco EXISTENTE (estado da migration 015, com dados) até a 019, e detecção de
  * migrations pendentes. Roda em um banco ISOLADO (`<banco de teste>` + sufixo `_upgrade_test`), criado
  * e apagado aqui, para não interferir no banco compartilhado dos demais testes.
  */
@@ -19,7 +19,8 @@ const ULTIMA_ANTES_DA_016 = '015_vinculo_restaurantes_regra_admin.sql';
 const PENDENTES_ESPERADAS = [
   '016_renomeia_vinculo_usuario_restaurantes.sql',
   '017_remove_legado_gastos_estoque.sql',
-  '018_boletos_extracoes_uso.sql'
+  '018_boletos_extracoes_uso.sql',
+  '019_boletos_extracoes_uso_timestamps.sql'
 ];
 
 const base = dbConfig();
@@ -116,7 +117,7 @@ const tabelasDe = async (pool) =>
 const colunasDe = async (pool, tabela) =>
   (await pool.query('SELECT column_name FROM information_schema.columns WHERE table_name = $1', [tabela])).rows.map((r) => r.column_name);
 
-describe('upgrade de banco existente (015 -> 018)', () => {
+describe('upgrade de banco existente (015 -> 019)', () => {
   let pool;
   const envOriginal = {};
   const CHAVES_ENV = ['NODE_ENV', 'JWT_SECRET', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'];
@@ -147,7 +148,7 @@ describe('upgrade de banco existente (015 -> 018)', () => {
       expect(await colunasDe(pool, 'usuarios')).toEqual(expect.arrayContaining(['modulo_financeiro', 'modulo_estoque']));
     });
 
-    it('migracoesPendentes lista exatamente a 016, a 017 e a 018', async () => {
+    it('migracoesPendentes lista exatamente a 016, a 017, a 018 e a 019', async () => {
       expect(await pendentes(pool)).toEqual(PENDENTES_ESPERADAS);
     });
 
@@ -208,7 +209,7 @@ describe('upgrade de banco existente (015 -> 018)', () => {
       saida1 = rodarMigrate();
     });
 
-    it('o migrate termina com sucesso e aplica só a 016, a 017 e a 018', () => {
+    it('o migrate termina com sucesso e aplica só a 016, a 017, a 018 e a 019', () => {
       expect(saida1.status).toBe(0);
       expect(saida1.stdout).toContain(`Executando migração: ${PENDENTES_ESPERADAS[0]}`);
       expect(saida1.stdout).toContain(`Executando migração: ${PENDENTES_ESPERADAS[1]}`);
@@ -217,7 +218,7 @@ describe('upgrade de banco existente (015 -> 018)', () => {
       expect(saida1.stdout).not.toContain('Executando migração: 015');
     });
 
-    it('016, 017 e 018 ficaram registradas em schema_migrations e não há pendências', async () => {
+    it('016 a 019 ficaram registradas em schema_migrations e não há pendências', async () => {
       const reg = (await pool.query('SELECT filename FROM schema_migrations')).rows.map((r) => r.filename);
       expect(reg).toEqual(expect.arrayContaining(PENDENTES_ESPERADAS));
       expect(reg).toHaveLength(MIGRATIONS.length);
