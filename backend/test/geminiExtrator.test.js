@@ -139,6 +139,34 @@ describe('GeminiExtrator (SDK oficial contra servidor HTTP local)', () => {
     delete process.env.GEMINI_THINKING_LEVEL;
   });
 
+  it('se o modelo recusar o nível de raciocínio (400 thinking), repete uma vez sem thinkingConfig e devolve o resultado', async () => {
+    let n = 0;
+    falso.estado.responder = (_req, res) => {
+      n += 1;
+      if (n === 1) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: { code: 400, message: 'Thinking level LOW is not supported for this model.', status: 'INVALID_ARGUMENT' } }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(envelope(TEXTO_MODELO)));
+    };
+    const r = await new GeminiExtrator().extrair(PNG, 'image/png');
+    expect(r).toBe(TEXTO_MODELO);
+    expect(falso.estado.requisicoes).toHaveLength(2);
+    expect(falso.estado.requisicoes[0].corpo.generationConfig.thinkingConfig).toBeDefined();
+    expect(falso.estado.requisicoes[1].corpo.generationConfig.thinkingConfig).toBeUndefined();
+  });
+
+  it('um 400 que não é de raciocínio não é repetido', async () => {
+    falso.estado.responder = (_req, res) => {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { code: 400, message: 'Invalid image', status: 'INVALID_ARGUMENT' } }));
+    };
+    await expect(new GeminiExtrator().extrair(PNG, 'image/png')).rejects.toThrow();
+    expect(falso.estado.requisicoes).toHaveLength(1);
+  });
+
   it('usa GEMINI_MODEL quando definido', async () => {
     process.env.GEMINI_MODEL = 'gemini-modelo-de-teste';
     await new GeminiExtrator().extrair(PNG, 'image/png');
@@ -146,9 +174,9 @@ describe('GeminiExtrator (SDK oficial contra servidor HTTP local)', () => {
   });
 
   it('sem GEMINI_MODEL usa o modelo padrão da família Flash', async () => {
-    expect(GEMINI_MODEL_PADRAO).toBe('gemini-3.8-flash');
+    expect(GEMINI_MODEL_PADRAO).toBe('gemini-flash-latest');
     await new GeminiExtrator().extrair(PNG, 'image/png');
-    expect(falso.estado.requisicoes[0].url).toContain('/models/gemini-3.8-flash:generateContent');
+    expect(falso.estado.requisicoes[0].url).toContain('/models/gemini-flash-latest:generateContent');
   });
 
   it('disponivel() é true só com GEMINI_API_KEY preenchida (espaços não contam)', () => {

@@ -4,7 +4,8 @@ import { ErroExtratorIndisponivel } from '../application/extracao.portas';
 import type { ExtratorBoleto } from '../application/extracao.portas';
 import type { MimeImagem } from '../domain/extracao';
 
-export const GEMINI_MODEL_PADRAO = 'gemini-3.8-flash';
+// Alias que acompanha o Flash vigente (modelos fixos, como o 2.5, deixam de aceitar contas novas).
+export const GEMINI_MODEL_PADRAO = 'gemini-flash-latest';
 export const GEMINI_TIMEOUT_PADRAO_MS = 60000;
 
 const INSTRUCAO_SISTEMA =
@@ -44,6 +45,11 @@ function configPensamento(raw: string | undefined): { thinkingConfig?: { thinkin
   return { thinkingConfig: { thinkingLevel: nivel === 'MINIMAL' ? ThinkingLevel.MINIMAL : ThinkingLevel.LOW } };
 }
 
+function recusouRaciocinio(erro: unknown): boolean {
+  const e = erro as { status?: unknown; message?: unknown } | null;
+  return e?.status === 400 && typeof e.message === 'string' && /thinking/i.test(e.message);
+}
+
 function inteiroPositivo(raw: string | undefined, padrao: number): number {
   const n = Number(raw);
   return Number.isInteger(n) && n > 0 ? n : padrao;
@@ -68,25 +74,37 @@ export class GeminiExtrator implements ExtratorBoleto {
       if (!this.cliente || this.cliente.chave !== chave) {
         this.cliente = { chave, ai: new GoogleGenAI({ apiKey: chave }) };
       }
-      const resposta = await this.cliente.ai.models.generateContent({
-        model,
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: PEDIDO }, { inlineData: { mimeType: mime, data: imagem.toString('base64') } }]
+      const ai = this.cliente.ai;
+      const chamar = (pensamento: { thinkingConfig?: { thinkingLevel: ThinkingLevel } }) =>
+        ai.models.generateContent({
+          model,
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: PEDIDO }, { inlineData: { mimeType: mime, data: imagem.toString('base64') } }]
+            }
+          ],
+          config: {
+            systemInstruction: INSTRUCAO_SISTEMA,
+            responseMimeType: 'application/json',
+            responseJsonSchema: ESQUEMA,
+            temperature: 0,
+            maxOutputTokens: 2048,
+            ...pensamento,
+            abortSignal: AbortSignal.timeout(timeout),
+            httpOptions: { timeout }
           }
-        ],
-        config: {
-          systemInstruction: INSTRUCAO_SISTEMA,
-          responseMimeType: 'application/json',
-          responseJsonSchema: ESQUEMA,
-          temperature: 0,
-          maxOutputTokens: 2048,
-          ...configPensamento(process.env.GEMINI_THINKING_LEVEL),
-          abortSignal: AbortSignal.timeout(timeout),
-          httpOptions: { timeout }
-        }
-      });
+        });
+      const pensamento = configPensamento(process.env.GEMINI_THINKING_LEVEL);
+      let resposta;
+      try {
+        resposta = await chamar(pensamento);
+      } catch (erro) {
+        // Nem todo modelo aceita todos os níveis de raciocínio: repete uma vez sem o parâmetro (só a mensagem é inspecionada).
+        if (!pensamento.thinkingConfig || !recusouRaciocinio(erro)) throw erro;
+        console.warn('Gemini: modelo recusou o nível de raciocínio; repetindo sem thinkingConfig');
+        resposta = await chamar({});
+      }
       const texto = resposta.text;
       if (!texto) throw new ErroExtratorIndisponivel();
       return texto;
