@@ -6,6 +6,8 @@ import type { MimeImagem } from '../domain/extracao';
 // O 2.5 Flash já não é liberado para projetos novos; o 3.x é o indicado pelo próprio Google.
 export const GEMINI_MODEL_PADRAO = 'gemini-3.8-flash';
 export const GEMINI_TIMEOUT_PADRAO_MS = 60000;
+export const GEMINI_MAX_RETENTATIVAS = 2;
+export const GEMINI_ATRASO_PADRAO_MS = 1500;
 export const GEMINI_URL_PADRAO = 'https://generativelanguage.googleapis.com/v1beta';
 
 const INSTRUCAO_SISTEMA =
@@ -96,13 +98,16 @@ export class GeminiExtrator implements ExtratorBoleto {
     const chave = process.env.GEMINI_API_KEY?.trim();
     if (!chave) throw new ErroExtratorIndisponivel();
     const timeout = inteiroPositivo(process.env.GEMINI_TIMEOUT_MS, GEMINI_TIMEOUT_PADRAO_MS);
-    const modelo = process.env.GEMINI_MODEL?.trim() || GEMINI_MODEL_PADRAO;
+    const principal = process.env.GEMINI_MODEL?.trim() || GEMINI_MODEL_PADRAO;
+    const reserva = process.env.GEMINI_MODEL_FALLBACK?.trim() || undefined;
+    const atrasoMs = inteiroPositivo(process.env.GEMINI_RETRY_DELAY_MS, GEMINI_ATRASO_PADRAO_MS);
     const base = (process.env.GEMINI_BASE_URL?.trim() || GEMINI_URL_PADRAO).replace(/\/+$/, '');
-    const url = `${base}/models/${encodeURIComponent(modelo)}:generateContent`;
     const dados = imagem.toString('base64');
+    const inicio = Date.now();
+    const restante = () => timeout - (Date.now() - inicio);
 
-    const chamar = async (pensamento: ConfigPensamento): Promise<unknown> => {
-      const resposta = await fetch(url, {
+    const chamar = async (modelo: string, pensamento: ConfigPensamento): Promise<unknown> => {
+      const resposta = await fetch(`${base}/models/${encodeURIComponent(modelo)}:generateContent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': chave },
         body: JSON.stringify({
@@ -116,23 +121,43 @@ export class GeminiExtrator implements ExtratorBoleto {
             ...pensamento
           }
         }),
-        signal: AbortSignal.timeout(timeout)
+        // O prazo vale para a leitura inteira (incluindo retentativas), não para cada tentativa.
+        signal: AbortSignal.timeout(Math.max(restante(), 1000))
       });
       if (!resposta.ok) throw new ErroHttpGemini(resposta.status, await resposta.text().catch(() => ''));
       return resposta.json();
     };
 
-    try {
+    /** Uma tentativa com um modelo; se ele recusar o thinkingConfig, repete uma vez sem o parâmetro. */
+    const tentar = async (modelo: string): Promise<unknown> => {
       const pensamento = configPensamento(modelo, process.env.GEMINI_THINKING_LEVEL, process.env.GEMINI_THINKING_BUDGET);
-      let corpo: unknown;
       try {
-        corpo = await chamar(pensamento);
+        return await chamar(modelo, pensamento);
       } catch (erro) {
-        // Nem todo modelo aceita configurar o raciocínio: repete uma vez sem o parâmetro (só o corpo do erro é inspecionado).
+        // Só o corpo do erro é inspecionado, para saber se o parâmetro foi recusado.
         const recusou = erro instanceof ErroHttpGemini && erro.status === 400 && /thinking/i.test(erro.corpo);
         if (!pensamento.thinkingConfig || !recusou) throw erro;
         console.warn('Gemini: modelo recusou thinkingConfig; repetindo sem o parâmetro');
-        corpo = await chamar({});
+        return chamar(modelo, {});
+      }
+    };
+
+    try {
+      let corpo: unknown;
+      let modelo = principal;
+      for (let tentativa = 0; ; tentativa += 1) {
+        try {
+          corpo = await tentar(modelo);
+          break;
+        } catch (erro) {
+          // 503 (alta demanda no provedor) é transitório: até 2 retentativas com espera crescente, dentro do prazo total.
+          const transitorio = erro instanceof ErroHttpGemini && erro.status === 503;
+          const espera = atrasoMs * (tentativa + 1);
+          if (!transitorio || tentativa >= GEMINI_MAX_RETENTATIVAS || restante() <= espera + 2000) throw erro;
+          if (tentativa >= 1 && reserva && reserva !== modelo) modelo = reserva;
+          console.warn(`Gemini: indisponível (503); nova tentativa ${tentativa + 1}/${GEMINI_MAX_RETENTATIVAS}`);
+          await new Promise((r) => setTimeout(r, espera));
+        }
       }
       const texto = textoDaResposta(corpo);
       if (!texto) throw new ErroExtratorIndisponivel();

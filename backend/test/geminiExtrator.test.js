@@ -62,7 +62,7 @@ describe('GeminiExtrator (API REST contra servidor HTTP local)', () => {
   let falso;
   let porta;
   const env = {};
-  const CHAVES = ['GEMINI_API_KEY', 'GEMINI_BASE_URL', 'GEMINI_MODEL', 'GEMINI_TIMEOUT_MS', 'GEMINI_THINKING_BUDGET', 'GEMINI_THINKING_LEVEL'];
+  const CHAVES = ['GEMINI_API_KEY', 'GEMINI_BASE_URL', 'GEMINI_MODEL', 'GEMINI_TIMEOUT_MS', 'GEMINI_THINKING_BUDGET', 'GEMINI_THINKING_LEVEL', 'GEMINI_MODEL_FALLBACK', 'GEMINI_RETRY_DELAY_MS'];
   let logs;
 
   beforeAll(async () => {
@@ -167,6 +167,60 @@ describe('GeminiExtrator (API REST contra servidor HTTP local)', () => {
     falso.estado.responder = (_req, res) => {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { code: 400, message: 'Invalid image', status: 'INVALID_ARGUMENT' } }));
+    };
+    await expect(new GeminiExtrator().extrair(PNG, 'image/png')).rejects.toBeInstanceOf(ErroExtratorIndisponivel);
+    expect(falso.estado.requisicoes).toHaveLength(1);
+  });
+
+  const resposta503 = (res) => {
+    res.writeHead(503, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { code: 503, message: 'high demand SEGREDO-DO-PROVEDOR', status: 'UNAVAILABLE' } }));
+  };
+
+  it('503 (alta demanda) é transitório: repete e devolve o resultado quando o provedor volta', async () => {
+    process.env.GEMINI_RETRY_DELAY_MS = '5';
+    let n = 0;
+    falso.estado.responder = (_req, res) => {
+      n += 1;
+      if (n <= 2) return resposta503(res);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(envelope(TEXTO_MODELO)));
+    };
+    expect(await new GeminiExtrator().extrair(PNG, 'image/png')).toBe(TEXTO_MODELO);
+    expect(falso.estado.requisicoes).toHaveLength(3);
+  });
+
+  it('503 persistente: desiste após 3 tentativas, vira ErroExtratorIndisponivel e não vaza o texto do provedor', async () => {
+    process.env.GEMINI_RETRY_DELAY_MS = '5';
+    falso.estado.responder = (_req, res) => resposta503(res);
+    const erro = await new GeminiExtrator().extrair(PNG, 'image/png').catch((e) => e);
+    expect(erro).toBeInstanceOf(ErroExtratorIndisponivel);
+    expect(falso.estado.requisicoes).toHaveLength(3);
+    expect(logs.join('\n')).not.toContain('SEGREDO-DO-PROVEDOR');
+    expect(logs.join('\n')).toMatch(/Gemini: chamada falhou status 503/);
+  });
+
+  it('com GEMINI_MODEL_FALLBACK, a 3ª tentativa usa o modelo alternativo', async () => {
+    process.env.GEMINI_RETRY_DELAY_MS = '5';
+    process.env.GEMINI_MODEL = 'modelo-principal';
+    process.env.GEMINI_MODEL_FALLBACK = 'modelo-reserva';
+    falso.estado.responder = (_req, res) => {
+      if (falso.estado.requisicoes.length < 3) return resposta503(res);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(envelope(TEXTO_MODELO)));
+    };
+    await new GeminiExtrator().extrair(PNG, 'image/png');
+    expect(falso.estado.requisicoes.map((r) => r.url.match(/models\/([^:]+):/)[1])).toEqual([
+      'modelo-principal',
+      'modelo-principal',
+      'modelo-reserva'
+    ]);
+  });
+
+  it('outros erros (ex.: 403) não são repetidos', async () => {
+    falso.estado.responder = (_req, res) => {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { code: 403, message: 'sem permissão' } }));
     };
     await expect(new GeminiExtrator().extrair(PNG, 'image/png')).rejects.toBeInstanceOf(ErroExtratorIndisponivel);
     expect(falso.estado.requisicoes).toHaveLength(1);
