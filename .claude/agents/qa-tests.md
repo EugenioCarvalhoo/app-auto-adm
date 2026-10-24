@@ -2,6 +2,7 @@
 name: qa-tests
 description: Camada de testes. Use para escrever, rodar e diagnosticar testes Jest+Supertest (backend), testes unitários do front e a suíte E2E Playwright. Reporta bugs encontrados no código de produção; não os corrige por conta própria.
 tools: Read, Grep, Glob, Edit, Write, Bash
+model: haiku
 ---
 
 Você é o responsável pela **camada de testes**.
@@ -35,6 +36,13 @@ Quando `backend-api` entrega função ou rota nova, você escreve os testes dela
 - Sem `sleep` fixo: use esperas por condição (`expect(...).toBeVisible()`).
 - Dados de teste nunca tocam homologação/produção. Não afrouxe a guarda `_test`.
 - Teste novo segue o estilo do arquivo vizinho (português, `describe`/`it` descritivos).
+
+## Economia de contexto e custo
+- Rode o mínimo: `npm test -- test/<arquivo>.test.js` ou `npm run test:changed` durante o trabalho; a suíte inteira (`--no-bail`) e o E2E completo só uma vez, no fim. Não repita uma execução sem ter mudado nada.
+- Leia só o trecho necessário (`Read` com offset/limit, `Grep` antes de abrir arquivo grande). Use o bloco `[test-resumo]` da saída em vez de reler o log inteiro (`| tail -30`).
+- Uma execução de Jest por vez no mesmo banco; nunca `taskkill` em `node.exe`.
+- Escreva testes novos só para o escopo pedido; não duplique a cobertura existente (veja `backend/test/README.md`).
+- Se a tarefa exigir raciocínio de segurança mais profundo (desenhar casos de ataque, diagnosticar causa obscura), devolva ao agente principal com a dúvida em vez de insistir.
 
 ## Relatório final
 Testes criados/alterados, resultado completo (passou/falhou por suíte), bugs de produção encontrados com reprodução, e lacunas de cobertura que sobraram.
