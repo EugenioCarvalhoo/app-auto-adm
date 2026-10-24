@@ -50,11 +50,8 @@ Veja [TESTING.md](./TESTING.md).
 ## Estrutura
 ```
 ├── backend/
-│   ├── server.ts            # monta o Express
-│   ├── db.ts                # pool do Postgres
-│   ├── routes/              # auth, restaurantes, boletos, admin, health
-│   ├── middleware/          # auth (JWT) e permissoes
-│   ├── lib/                 # boletos, boletosSemana, erros, tipos, loadEnv
+│   ├── src/                 # NestJS: main.ts, módulos acesso/auth/restaurantes/boletos/admin/health/shared/config
+│   │                        # (cada um em domain/application/infrastructure/presentation)
 │   ├── database/            # migrate.js, create_admin.js, migrations/
 │   ├── test/                # Jest + Supertest
 │   └── Dockerfile

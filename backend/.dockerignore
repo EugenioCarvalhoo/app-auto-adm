@@ -8,3 +8,10 @@ coverage
 *.log
 Dockerfile
 .dockerignore
+
+# Legado/compat de teste fora de src/ (a imagem usa só src/ compilado + database/)
+server.ts
+db.ts
+lib
+routes
+middleware

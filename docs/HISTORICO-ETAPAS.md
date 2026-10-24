@@ -159,3 +159,13 @@ Todo o resto (gastos, relatórios, estoque) é legado a remover **depois** de a 
   - Tipos `Boleto`, `SemanaResumo` e `Meta` em `types.ts` ainda não foram conferidos linha a linha contra `backend/routes/boletos.ts`; o `qa-tests` está conferindo.
   - E2E (Playwright) está sendo rodado pelo `qa-tests`; resultado ainda não registrado aqui.
   - Faltam commit e validação do build do front (`CI=true npx react-scripts build`) após a migração.
+
+## 11. Migração do backend para NestJS (23/10/2026)
+- Branch `feat/backend-nestjs` (sem commit ainda). Backend migrado de Express puro para **NestJS 10** com arquitetura limpa em `backend/src/` (módulos `acesso`, `auth`, `restaurantes`, `boletos`, `admin`, `health`, `shared`, `config`; camadas domain/application/infrastructure/presentation; guards no lugar de middleware). **Contrato da API inalterado.**
+- Decisões: Nest fixado em 10.x (a 11 exige Node 20; a imagem é `node:18-alpine`); `tsconfig` com `rootDir: src`, então só `src/` é compilado e o entrypoint passou a ser `dist/main.js`; `cors` removido (o Nest cuida); `database/` e `scripts/` seguem em JS.
+- Docker/CI: `CMD` da imagem agora é `node database/migrate.js` + `exec node dist/main.js`; `.dockerignore` do back exclui `server.ts`, `db.ts`, `lib`, `routes`, `middleware`. O workflow `ci-deploy.yml` não precisou mudar (já roda `typecheck` e `build` antes do Jest). `lista-migrations.js` é achado subindo diretórios a partir de `dist/` (validado na imagem: `/app/database`).
+- Validado (WSL Ubuntu): `docker build ./backend`; `docker compose up --build` com `/api/health` 200, `/api/health/ready` 200 (`migrations: ok`) e login inválido 401; container saudável. A porta 8080 do `web` já estava ocupada no host, então o front não subiu nesse teste.
+- Easypanel: se o Comando de Início da API estiver preenchido, deve ser `npm run start:prod` (já usa `dist/main.js`) ou vazio; nunca `node dist/server.js`.
+- Pendências:
+  - Remover os órfãos antigos `backend/routes`, `backend/middleware`, `backend/db.ts`, `backend/lib/boletos.ts`, `backend/lib/tipos.ts` e a camada de compatibilidade de teste `backend/server.ts` + `backend/lib/*` quando os testes passarem a importar de `src/` diretamente. O E2E (`e2e/playwright.config.js`) ainda inicia a API com `npx tsx server.ts`; migrar para `src/main.ts` na mesma ocasião.
+  - Bugs conhecidos do Express preservados de propósito (cobertos com `it.failing` nos testes de contrato): corrigir em tarefa própria e trocar para `it`.
