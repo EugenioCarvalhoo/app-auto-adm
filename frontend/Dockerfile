@@ -1,7 +1,7 @@
 # Dockerfile do frontend (React 18 / CRA servido pelo nginx)
 
 # Stage 1: build
-FROM node:18-alpine AS build
+FROM node:20-alpine AS build
 WORKDIR /app
 
 COPY package*.json ./

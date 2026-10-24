@@ -13,7 +13,7 @@ Regras detalhadas e arquitetura: [CLAUDE.md](./CLAUDE.md). Histórico das etapas
 - **Entrega:** Docker (uma imagem para a API, outra para o front com nginx), Easypanel, GitHub Actions.
 
 ## Pré-requisitos
-- Node.js 18+
+- Node.js 20+
 - PostgreSQL 12+ (ou Docker)
 
 ## Rodar em desenvolvimento
@@ -30,8 +30,6 @@ npm run migrate
 npm run create-admin                     # admin / admin123 — troque a senha
 npm run dev                              # API em :5000 e front em :3000
 ```
-
-Detalhes e solução de problemas: [setup.md](./setup.md).
 
 ## Rodar com Docker
 ```bash
@@ -52,11 +50,8 @@ Veja [TESTING.md](./TESTING.md).
 ## Estrutura
 ```
 ├── backend/
-│   ├── server.ts            # monta o Express
-│   ├── db.ts                # pool do Postgres
-│   ├── routes/              # auth, restaurantes, boletos, admin, health
-│   ├── middleware/          # auth (JWT) e permissoes
-│   ├── lib/                 # boletos, boletosSemana, erros, tipos, loadEnv
+│   ├── src/                 # NestJS: main.ts, módulos acesso/auth/restaurantes/boletos/admin/health/shared/config
+│   │                        # (cada um em domain/application/infrastructure/presentation)
 │   ├── database/            # migrate.js, create_admin.js, migrations/
 │   ├── test/                # Jest + Supertest
 │   └── Dockerfile

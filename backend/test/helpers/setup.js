@@ -9,6 +9,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { dbConfig } = require('./dbConfig');
+const { criarApp } = require('./app');
 
 const JWT_SECRET = 'jest_jwt_secret';
 
@@ -90,9 +91,9 @@ async function semear(pool, c = cenarioPadrao()) {
  * (cada arquivo tem seu próprio registro de módulos e seu próprio pool); o banco é semeado a cada teste.
  */
 function usarBancoReal() {
-  const env = { app: null, pool: null };
+  const env = { app: null, pool: null, fechar: null };
 
-  beforeAll(() => {
+  beforeAll(async () => {
     const cfg = dbConfig();
     process.env.NODE_ENV = 'test';
     process.env.JWT_SECRET = JWT_SECRET;
@@ -101,14 +102,15 @@ function usarBancoReal() {
     process.env.DB_NAME = cfg.database;
     process.env.DB_USER = cfg.user;
     process.env.DB_PASSWORD = cfg.password;
-    // eslint-disable-next-line global-require
-    env.app = require('../../server');
-    env.pool = env.app.locals.pool;
+    const criado = await criarApp();
+    env.app = criado.app;
+    env.pool = criado.pool;
+    env.fechar = criado.fechar;
   });
 
   beforeEach(() => semear(env.pool));
 
-  afterAll(() => env.pool.end());
+  afterAll(() => env.fechar());
 
   /** Linhas de uma consulta direta ao banco (para conferir o efeito de uma requisição). */
   env.rows = async (sql, params = []) => (await env.pool.query(sql, params)).rows;

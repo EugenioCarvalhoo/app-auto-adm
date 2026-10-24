@@ -1,4 +1,4 @@
-const { codigoErro, mensagemErro, stackErro } = require('../lib/erros');
+const { codigoErro, mensagemErro, stackErro } = require('../src/shared/domain/erros');
 
 describe('codigoErro', () => {
   it('retorna o code string do erro (ex.: SQLSTATE do pg)', () => {

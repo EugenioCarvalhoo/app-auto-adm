@@ -1,5 +1,5 @@
 /**
- * Migrations no Postgres real: schema completo (001–017 aplicadas pelo globalSetup via migrate.js),
+ * Migrations no Postgres real: schema completo (001–018 aplicadas pelo globalSetup via migrate.js),
  * regra de vínculo da 015 e idempotência do migrate.
  */
 const fs = require('fs');
@@ -65,6 +65,46 @@ describe('migrations (Postgres real)', () => {
       expect(cols).not.toContain(legada);
     }
     expect(cols).toEqual(expect.arrayContaining(['is_admin', 'modulo_boletos']));
+  });
+
+  it('018: limite diário de leituras por IA (chave usuário+dia, total >= 0, cascata ao apagar usuário)', async () => {
+    const pk = (await pool.query(
+      `SELECT a.attname AS coluna FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+       WHERE i.indrelid = 'boletos_extracoes_uso'::regclass AND i.indisprimary ORDER BY a.attnum`
+    )).rows.map((r) => r.coluna);
+    expect(pk).toEqual(['usuario_id', 'dia']);
+    await expect(pool.query(`INSERT INTO boletos_extracoes_uso (usuario_id, dia, total) VALUES (2, '2026-10-23', -1)`)).rejects.toMatchObject({
+      code: '23514'
+    });
+    await semear(pool, cenarioPadrao());
+    await pool.query(`INSERT INTO boletos_extracoes_uso (usuario_id, dia, total) VALUES (2, '2026-10-23', 1)`);
+    await pool.query('DELETE FROM usuarios WHERE id = 2');
+    expect((await pool.query('SELECT count(*)::int AS n FROM boletos_extracoes_uso WHERE usuario_id = 2')).rows[0].n).toBe(0);
+  });
+
+  it('018 é idempotente: reexecutar o SQL não falha nem apaga contagens', async () => {
+    await semear(pool, cenarioPadrao());
+    await pool.query(`INSERT INTO boletos_extracoes_uso (usuario_id, dia, total) VALUES (2, '2026-10-23', 2)`);
+    await pool.query(fs.readFileSync(path.join(__dirname, '..', 'database', 'migrations', '018_boletos_extracoes_uso.sql'), 'utf8'));
+    const { rows } = await pool.query('SELECT total FROM boletos_extracoes_uso WHERE usuario_id = 2');
+    expect(rows).toEqual([{ total: 2 }]);
+  });
+
+  it('019: tabela da versão antiga (sem created_at/updated_at) ganha as colunas e o upsert do limite funciona, sem perder contagens', async () => {
+    await semear(pool, cenarioPadrao());
+    await pool.query('ALTER TABLE boletos_extracoes_uso DROP COLUMN created_at, DROP COLUMN updated_at');
+    await pool.query(`INSERT INTO boletos_extracoes_uso (usuario_id, dia, total) VALUES (2, '2026-10-23', 4)`);
+    await pool.query(fs.readFileSync(path.join(__dirname, '..', 'database', 'migrations', '019_boletos_extracoes_uso_timestamps.sql'), 'utf8'));
+    const cols = (await pool.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'boletos_extracoes_uso' ORDER BY column_name`
+    )).rows.map((r) => r.column_name);
+    expect(cols).toEqual(['created_at', 'dia', 'total', 'updated_at', 'usuario_id']);
+    const up = await pool.query(
+      `INSERT INTO boletos_extracoes_uso (usuario_id, dia, total) VALUES (2, '2026-10-23', 1)
+       ON CONFLICT (usuario_id, dia) DO UPDATE SET total = boletos_extracoes_uso.total + 1, updated_at = now()
+       WHERE boletos_extracoes_uso.total < 30 RETURNING total`
+    );
+    expect(up.rows).toEqual([{ total: 5 }]);
   });
 
   describe('015: vínculo de quem tinha acesso livre (modulo_financeiro)', () => {

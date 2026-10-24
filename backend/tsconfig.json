@@ -5,15 +5,17 @@
     "moduleResolution": "node",
     "lib": ["ES2020"],
     "types": ["node", "jest"],
-    "rootDir": ".",
+    "rootDir": "src",
     "outDir": "dist",
     "strict": true,
     "esModuleInterop": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "sourceMap": true
   },
-  "include": ["server.ts", "db.ts", "routes/**/*.ts", "middleware/**/*.ts", "lib/**/*.ts"],
+  "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist", "test", "database", "scripts"]
 }

@@ -1,5 +1,5 @@
 /**
- * Upgrade de um banco EXISTENTE (estado da migration 015, com dados) até a 017, e detecção de
+ * Upgrade de um banco EXISTENTE (estado da migration 015, com dados) até a 019, e detecção de
  * migrations pendentes. Roda em um banco ISOLADO (`<banco de teste>` + sufixo `_upgrade_test`), criado
  * e apagado aqui, para não interferir no banco compartilhado dos demais testes.
  */
@@ -10,12 +10,18 @@ const { Pool } = require('pg');
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
 const { dbConfig } = require('./helpers/dbConfig');
+const { criarApp } = require('./helpers/app');
 const { MIGRATIONS } = require('../database/lista-migrations');
 
 const DIR_MIGRATIONS = path.join(__dirname, '..', 'database', 'migrations');
 const MIGRATE_JS = path.join(__dirname, '..', 'database', 'migrate.js');
 const ULTIMA_ANTES_DA_016 = '015_vinculo_restaurantes_regra_admin.sql';
-const PENDENTES_ESPERADAS = ['016_renomeia_vinculo_usuario_restaurantes.sql', '017_remove_legado_gastos_estoque.sql'];
+const PENDENTES_ESPERADAS = [
+  '016_renomeia_vinculo_usuario_restaurantes.sql',
+  '017_remove_legado_gastos_estoque.sql',
+  '018_boletos_extracoes_uso.sql',
+  '019_boletos_extracoes_uso_timestamps.sql'
+];
 
 const base = dbConfig();
 const NOME_DB = 'controle_financeiro_upgrade_test';
@@ -27,7 +33,7 @@ async function pendentes(pool) {
   let lib = null;
   try {
     // eslint-disable-next-line global-require
-    lib = require('../lib/migracoes');
+    lib = require('../src/health/infrastructure/pg-saude');
   } catch (e) {
     lib = null;
   }
@@ -111,7 +117,7 @@ const tabelasDe = async (pool) =>
 const colunasDe = async (pool, tabela) =>
   (await pool.query('SELECT column_name FROM information_schema.columns WHERE table_name = $1', [tabela])).rows.map((r) => r.column_name);
 
-describe('upgrade de banco existente (015 -> 017)', () => {
+describe('upgrade de banco existente (015 -> 019)', () => {
   let pool;
   const envOriginal = {};
   const CHAVES_ENV = ['NODE_ENV', 'JWT_SECRET', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'];
@@ -142,7 +148,7 @@ describe('upgrade de banco existente (015 -> 017)', () => {
       expect(await colunasDe(pool, 'usuarios')).toEqual(expect.arrayContaining(['modulo_financeiro', 'modulo_estoque']));
     });
 
-    it('migracoesPendentes lista exatamente a 016 e a 017', async () => {
+    it('migracoesPendentes lista exatamente a 016, a 017, a 018 e a 019', async () => {
       expect(await pendentes(pool)).toEqual(PENDENTES_ESPERADAS);
     });
 
@@ -179,9 +185,8 @@ describe('upgrade de banco existente (015 -> 017)', () => {
       jest.spyOn(console, 'error').mockImplementation(() => {});
       try {
         await jest.isolateModulesAsync(async () => {
-          // eslint-disable-next-line global-require
-          const app = require('../server');
-          appPool = app.locals.pool;
+          const { app, pool: poolDoApp } = await criarApp();
+          appPool = poolDoApp;
           const token = jwt.sign({ id: 1, username: 'admin', is_admin: true }, 'jest_jwt_secret', { expiresIn: '1h' });
           const res = await request(app).get('/api/admin/usuarios-permissoes').set('Authorization', `Bearer ${token}`);
           expect(res.status).toBe(503);
@@ -204,19 +209,32 @@ describe('upgrade de banco existente (015 -> 017)', () => {
       saida1 = rodarMigrate();
     });
 
-    it('o migrate termina com sucesso e aplica só a 016 e a 017', () => {
+    it('o migrate termina com sucesso e aplica só a 016, a 017, a 018 e a 019', () => {
       expect(saida1.status).toBe(0);
       expect(saida1.stdout).toContain(`Executando migração: ${PENDENTES_ESPERADAS[0]}`);
       expect(saida1.stdout).toContain(`Executando migração: ${PENDENTES_ESPERADAS[1]}`);
+      expect(saida1.stdout).toContain(`Executando migração: ${PENDENTES_ESPERADAS[2]}`);
       expect(saida1.stdout).not.toContain('Executando migração: 014');
       expect(saida1.stdout).not.toContain('Executando migração: 015');
     });
 
-    it('016 e 017 ficaram registradas em schema_migrations e não há pendências', async () => {
+    it('016 a 019 ficaram registradas em schema_migrations e não há pendências', async () => {
       const reg = (await pool.query('SELECT filename FROM schema_migrations')).rows.map((r) => r.filename);
       expect(reg).toEqual(expect.arrayContaining(PENDENTES_ESPERADAS));
       expect(reg).toHaveLength(MIGRATIONS.length);
       expect(await pendentes(pool)).toEqual([]);
+    });
+
+    it('018: a tabela do limite diário de leituras por IA existe, com chave (usuário, dia) e total não negativo', async () => {
+      expect(await tabelasDe(pool)).toContain('boletos_extracoes_uso');
+      const pk = (await pool.query(
+        `SELECT a.attname AS coluna FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+         WHERE i.indrelid = 'boletos_extracoes_uso'::regclass AND i.indisprimary ORDER BY a.attnum`
+      )).rows.map((r) => r.coluna);
+      expect(pk).toEqual(['usuario_id', 'dia']);
+      await expect(
+        pool.query(`INSERT INTO boletos_extracoes_uso (usuario_id, dia, total) VALUES (1, '2026-10-23', -1)`)
+      ).rejects.toMatchObject({ code: '23514' });
     });
 
     it('usuario_restaurantes existe com TODOS os vínculos e índices; a tabela antiga sumiu', async () => {
